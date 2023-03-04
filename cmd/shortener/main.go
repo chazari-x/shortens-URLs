@@ -23,23 +23,19 @@ func sGet(w http.ResponseWriter, r *http.Request) {
 			if sURLs[i].id == r.URL.Path[1:] {
 				w.WriteHeader(http.StatusTemporaryRedirect)
 				w.Header().Set("content-type", "text/plain; charset=utf-8")
-
-				_, err := fmt.Fprintln(w, sURLs[i].URL)
+				_, err := w.Write([]byte(sURLs[i].URL))
 				if err != nil {
-					http.Error(w, http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError)
+					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 				break
 			} else if i == len(sURLs)-1 {
-				http.Error(w, http.StatusText(http.StatusBadRequest),
-					http.StatusBadRequest)
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 		}
 	} else {
-		http.Error(w, http.StatusText(http.StatusBadRequest),
-			http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 }
@@ -50,12 +46,12 @@ func sPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if json.NewDecoder(r.Body).Decode(&aURL) != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if aURL.AURL == "" {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	} else {
 		sURLs = append(sURLs, struct {
@@ -68,8 +64,7 @@ func sPost(w http.ResponseWriter, r *http.Request) {
 
 		_, err := fmt.Fprintln(w, "http://localhost:8080/"+strconv.Itoa(len(sURLs)-1))
 		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError),
-				http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
