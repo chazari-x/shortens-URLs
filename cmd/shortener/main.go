@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -62,7 +61,7 @@ func sPost(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
 
-		_, err := fmt.Fprintln(w, "http://localhost:8080/"+strconv.Itoa(len(sURLs)-1))
+		_, err := w.Write([]byte("http://localhost:8080/" + strconv.Itoa(len(sURLs)-1)))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
