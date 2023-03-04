@@ -70,9 +70,6 @@ func sPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	sURLs = append(sURLs, sURL{id: strconv.Itoa(len(sURLs)),
-		URL: "https://vk.com/im?peers=c19&sel=390295814&z=photo390295814_457243386%2Fmail320677"})
-
 	r := chi.NewRouter()
 	r.Get("/*", sGet)
 
