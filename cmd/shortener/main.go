@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -18,20 +18,21 @@ type sURL struct {
 
 func sGet(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "" {
-		for i := 0; i < len(sURLs); i++ {
-			if sURLs[i].id == r.URL.Path[1:] {
-				w.WriteHeader(http.StatusTemporaryRedirect)
-				w.Header().Set("content-type", "text/plain; charset=utf-8")
-				_, err := w.Write([]byte(sURLs[i].URL))
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-				break
-			} else if i == len(sURLs)-1 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
+		url, err := Get(r.URL.Path[1:])
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if url == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		w.Header().Set("content-type", "text/plain; charset=utf-8")
+		_, err = w.Write([]byte(url))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
@@ -40,28 +41,22 @@ func sGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func sPost(w http.ResponseWriter, r *http.Request) {
-	var aURL struct {
-		URL string `json:"url"`
-	}
+	b, _ := io.ReadAll(r.Body)
 
-	if json.NewDecoder(r.Body).Decode(&aURL) != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if aURL.URL == "" {
+	if string(b) == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	} else {
-		sURLs = append(sURLs, struct {
-			id  string
-			URL string
-		}{id: strconv.Itoa(len(sURLs)), URL: aURL.URL})
+		id, err := Add(string(b))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusCreated)
 
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
 
-		_, err := w.Write([]byte("http://localhost:8080/" + strconv.Itoa(len(sURLs)-1)))
+		_, err = w.Write([]byte("http://localhost:8080/" + id))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -78,4 +73,24 @@ func main() {
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Print("listen and serve err: ", err.Error())
 	}
+}
+
+func Add(url string) (string, error) {
+	id := strconv.Itoa(len(sURLs))
+	sURLs = append(sURLs, struct {
+		id  string
+		URL string
+	}{id: id, URL: url})
+
+	return id, nil
+}
+
+func Get(id string) (string, error) {
+	for i := 0; i < len(sURLs); i++ {
+		if sURLs[i].id == id {
+			return sURLs[i].id, nil
+		}
+	}
+
+	return "", nil
 }
