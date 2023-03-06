@@ -12,7 +12,6 @@ import (
 var sURLs = make(map[int]string)
 
 func sGet(w http.ResponseWriter, r *http.Request) {
-	url := ""
 	if r.URL.Path != "" {
 		url, err := Get(r.URL.Path[1:])
 		if err != nil {
@@ -29,7 +28,6 @@ func sGet(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return
 	} else {
-		w.Header().Set("Location", url)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
