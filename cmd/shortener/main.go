@@ -41,7 +41,7 @@ func sGet(w http.ResponseWriter, r *http.Request) {
 
 func sPost(w http.ResponseWriter, r *http.Request) {
 	var aURL struct {
-		AURL string `json:"aurl"`
+		URL string `json:"url"`
 	}
 
 	if json.NewDecoder(r.Body).Decode(&aURL) != nil {
@@ -49,14 +49,14 @@ func sPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if aURL.AURL == "" {
+	if aURL.URL == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	} else {
 		sURLs = append(sURLs, struct {
 			id  string
 			URL string
-		}{id: strconv.Itoa(len(sURLs)), URL: aURL.AURL})
+		}{id: strconv.Itoa(len(sURLs)), URL: aURL.URL})
 		w.WriteHeader(http.StatusCreated)
 
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
