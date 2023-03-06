@@ -24,11 +24,7 @@ func sGet(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
-		_, err = w.Write([]byte(url))
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		w.Header().Set("Location", url)
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
 		return
