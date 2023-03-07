@@ -11,7 +11,6 @@ import (
 func StartSever() error {
 	r := chi.NewRouter()
 	r.Get("/*", handlers.Get)
-
 	r.Post("/", handlers.Post)
 
 	if err := http.ListenAndServe(":8080", r); err != nil {

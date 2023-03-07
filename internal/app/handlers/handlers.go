@@ -22,10 +22,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", url)
 		w.Header().Set("content-type", "text/plain")
 		w.WriteHeader(http.StatusTemporaryRedirect)
-		return
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
-		return
 	}
 }
 
@@ -34,16 +32,15 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	if string(b) == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		return
 	} else {
 		id, err := storage.Add(string(b))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
 
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusCreated)
 
 		_, err = w.Write([]byte("http://localhost:8080/" + id))
 		if err != nil {
