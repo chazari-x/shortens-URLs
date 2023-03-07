@@ -44,33 +44,33 @@ func TestServer(t *testing.T) {
 
 	statusCode, actual := testRequest(t, ts, "POST", "/", "https://stackoverflow.com/questions/13896592/how-to-convert-url-url-to-string-in-go-google-app-engine")
 	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/0", actual)
+	assert.Equal(t, "http://localhost:8080/0/000000", actual)
 
 	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/chazari-x?tab=overview&from=2023-03-01&to=2023-03-07")
 	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/1", actual)
+	assert.Equal(t, "http://localhost:8080/0/000001", actual)
 
 	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/chazari-x/shortens-URLs/pull/2")
 	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/2", actual)
+	assert.Equal(t, "http://localhost:8080/0/000002", actual)
 
 	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/golang-standards/project-layout/blob/master/README_ru.md")
 	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/3", actual)
+	assert.Equal(t, "http://localhost:8080/0/000003", actual)
 
-	statusCode, actual = testRequest(t, ts, "GET", "/0", "")
+	statusCode, actual = testRequest(t, ts, "GET", "/0/000000", "")
 	assert.Equal(t, http.StatusOK, statusCode)
 	assert.Equal(t, "https://stackoverflow.com/questions/13896592/how-to-convert-url-url-to-string-in-go-google-app-engine", actual)
 
-	statusCode, actual = testRequest(t, ts, "GET", "/1", "")
+	statusCode, actual = testRequest(t, ts, "GET", "/0/000001", "")
 	assert.Equal(t, http.StatusOK, statusCode)
 	assert.Equal(t, "https://github.com/chazari-x?tab=overview&from=2023-03-01&to=2023-03-07", actual)
 
-	statusCode, actual = testRequest(t, ts, "GET", "/2", "")
+	statusCode, actual = testRequest(t, ts, "GET", "/0/000002", "")
 	assert.Equal(t, http.StatusOK, statusCode)
 	assert.Equal(t, "https://github.com/chazari-x/shortens-URLs/pull/2", actual)
 
-	statusCode, actual = testRequest(t, ts, "GET", "/3", "")
+	statusCode, actual = testRequest(t, ts, "GET", "/0/000003", "")
 	assert.Equal(t, http.StatusOK, statusCode)
 	assert.Equal(t, "https://github.com/golang-standards/project-layout/blob/master/README_ru.md", actual)
 }
