@@ -12,25 +12,25 @@ func TestAddAndGet(t *testing.T) {
 		{
 			name:    "1",
 			url:     "https://github.com/chazari-x?tab=overview&from=2023-03-01&to=2023-03-07",
-			want:    "0/000000",
+			want:    "0",
 			wantErr: false,
 		},
 		{
 			name:    "2",
 			url:     "https://pkg.go.dev/net/http@go1.17.2",
-			want:    "0/000001",
+			want:    "1",
 			wantErr: false,
 		},
 		{
 			name:    "3",
 			url:     "https://github.com/golang-standards/project-layout/blob/master/README_ru.md",
-			want:    "0/000002",
+			want:    "2",
 			wantErr: false,
 		},
 		{
 			name:    "4",
 			url:     "https://account.jetbrains.com/licenses",
-			want:    "0/000003",
+			want:    "3",
 			wantErr: false,
 		},
 	}
