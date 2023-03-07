@@ -34,9 +34,6 @@ func Shortens(n int) string {
 		case 14:
 			id = "e" + id
 			n = 0
-		case 15:
-			id = "f" + id
-			n = 0
 		default:
 			id = "f" + id
 			n -= 15

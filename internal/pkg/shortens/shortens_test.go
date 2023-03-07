@@ -25,8 +25,8 @@ func TestShortens(t *testing.T) {
 		},
 		{
 			name: "4",
-			args: 4572,
-			want: "50/0cffff",
+			args: 90,
+			want: "0/ffffff",
 		},
 		{
 			name: "5",
