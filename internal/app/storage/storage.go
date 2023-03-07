@@ -1,20 +1,18 @@
 package storage
 
-import "strconv"
+import (
+	"main/internal/pkg/shortens"
+)
 
-var sURLs = make(map[int]string)
+var sURLs = make(map[string]string)
 
-func Add(url string) (int, error) {
-	id := len(sURLs)
+func Add(url string) (string, error) {
+	id := shortens.Shortens(len(sURLs))
 	sURLs[id] = url
 
 	return id, nil
 }
 
-func Get(sid string) (string, error) {
-	id, err := strconv.Atoi(sid)
-	if err != nil {
-		return "", err
-	}
+func Get(id string) (string, error) {
 	return sURLs[id], nil
 }

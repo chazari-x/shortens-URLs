@@ -3,7 +3,6 @@ package handlers
 import (
 	"io"
 	"net/http"
-	"strconv"
 
 	"main/internal/app/storage"
 )
@@ -46,7 +45,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("content-type", "text/plain; charset=utf-8")
 
-		_, err = w.Write([]byte("http://localhost:8080/" + strconv.Itoa(id)))
+		_, err = w.Write([]byte("http://localhost:8080/" + id))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
