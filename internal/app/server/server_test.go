@@ -5,13 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/handlers"
-	"main/internal/pkg/shortens"
 )
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (int, string) {
@@ -55,9 +55,9 @@ func TestServer(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)
-		assert.Equal(t, "http://localhost:8080/"+shortens.Short(i), actual)
+		assert.Equal(t, "http://localhost:8080/"+strconv.FormatInt(int64(i), 36), actual)
 
-		statusCode, actual = testRequest(t, ts, "GET", "/"+shortens.Short(i), "")
+		statusCode, actual = testRequest(t, ts, "GET", "/"+strconv.FormatInt(int64(i), 36), "")
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.Equal(t, urls[n], actual)
 
