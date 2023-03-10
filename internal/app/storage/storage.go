@@ -4,15 +4,21 @@ import (
 	"main/internal/pkg/shortens"
 )
 
-var sURLs = make(map[string]string)
+var storageURLs []string
 
 func Add(url string) (string, error) {
-	id := shortens.Shortens(len(sURLs))
-	sURLs[id] = url
+	id := shortens.Short(len(storageURLs))
+
+	storageURLs = append(storageURLs, url)
 
 	return id, nil
 }
 
 func Get(id string) (string, error) {
-	return sURLs[id], nil
+	i, err := shortens.Original(id)
+	if err != nil {
+		return "", err
+	}
+
+	return storageURLs[i], nil
 }

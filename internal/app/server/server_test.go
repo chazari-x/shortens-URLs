@@ -11,9 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/handlers"
+	"main/internal/pkg/shortens"
 )
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (int, string) {
+	t.Helper()
+
 	req, err := http.NewRequest(method, ts.URL+path, bytes.NewReader([]byte(body)))
 	require.NoError(t, err)
 
@@ -37,40 +40,32 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 func TestServer(t *testing.T) {
 	r := chi.NewRouter()
-	r.Get("/*", handlers.Get)
+	r.Get("/{id}", handlers.Get)
 	r.Post("/", handlers.Post)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	statusCode, actual := testRequest(t, ts, "POST", "/", "https://stackoverflow.com/questions/13896592/how-to-convert-url-url-to-string-in-go-google-app-engine")
-	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/0", actual)
+	var urls = []string{"https://pkg.go.dev/net/http@go1.17.2",
+		"https://pkg.go.dev/net/http@go1.17.2",
+		"https://github.com/chazari-x/shortens-URLs/pull/2",
+		"https://github.com/golang-standards/project-layout/blob/master/README_ru.md",
+	}
 
-	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/chazari-x?tab=overview&from=2023-03-01&to=2023-03-07")
-	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/1", actual)
+	var n = 0
+	for i := 0; i < 25; i++ {
+		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
+		assert.Equal(t, http.StatusCreated, statusCode)
+		assert.Equal(t, "http://localhost:8080/"+shortens.Short(i), actual)
 
-	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/chazari-x/shortens-URLs/pull/2")
-	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/2", actual)
+		statusCode, actual = testRequest(t, ts, "GET", "/"+shortens.Short(i), "")
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.Equal(t, urls[n], actual)
 
-	statusCode, actual = testRequest(t, ts, "POST", "/", "https://github.com/golang-standards/project-layout/blob/master/README_ru.md")
-	assert.Equal(t, http.StatusCreated, statusCode)
-	assert.Equal(t, "http://localhost:8080/3", actual)
+		if n == 3 {
+			n = 0
+		} else {
+			n++
+		}
+	}
 
-	statusCode, actual = testRequest(t, ts, "GET", "/0", "")
-	assert.Equal(t, http.StatusOK, statusCode)
-	assert.Equal(t, "https://stackoverflow.com/questions/13896592/how-to-convert-url-url-to-string-in-go-google-app-engine", actual)
-
-	statusCode, actual = testRequest(t, ts, "GET", "/1", "")
-	assert.Equal(t, http.StatusOK, statusCode)
-	assert.Equal(t, "https://github.com/chazari-x?tab=overview&from=2023-03-01&to=2023-03-07", actual)
-
-	statusCode, actual = testRequest(t, ts, "GET", "/2", "")
-	assert.Equal(t, http.StatusOK, statusCode)
-	assert.Equal(t, "https://github.com/chazari-x/shortens-URLs/pull/2", actual)
-
-	statusCode, actual = testRequest(t, ts, "GET", "/3", "")
-	assert.Equal(t, http.StatusOK, statusCode)
-	assert.Equal(t, "https://github.com/golang-standards/project-layout/blob/master/README_ru.md", actual)
 }

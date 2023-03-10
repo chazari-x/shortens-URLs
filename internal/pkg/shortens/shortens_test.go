@@ -2,7 +2,7 @@ package shortens
 
 import "testing"
 
-func TestShortens(t *testing.T) {
+func TestShort(t *testing.T) {
 	tests := []struct {
 		name string
 		args int
@@ -41,8 +41,66 @@ func TestShortens(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Shortens(tt.args); got != tt.want {
-				t.Errorf("Shortens() = %v, want %v", got, tt.want)
+			if got := Short(tt.args); got != tt.want {
+				t.Errorf("Short() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOriginal(t *testing.T) {
+	tests := []struct {
+		name    string
+		want    int
+		args    string
+		wantErr bool
+	}{
+		{
+			name:    "1",
+			want:    0,
+			args:    "0",
+			wantErr: false,
+		},
+		{
+			name:    "2",
+			want:    11,
+			args:    "b",
+			wantErr: false,
+		},
+		{
+			name:    "3",
+			want:    123,
+			args:    "7b",
+			wantErr: false,
+		},
+		{
+			name:    "4",
+			want:    90,
+			args:    "5a",
+			wantErr: false,
+		},
+		{
+			name:    "5",
+			want:    10000,
+			args:    "2710",
+			wantErr: false,
+		},
+		{
+			name:    "6",
+			want:    1000000,
+			args:    "f4240",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Original(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Original() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Original() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
