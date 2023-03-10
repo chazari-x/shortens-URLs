@@ -21,22 +21,22 @@ func TestShort(t *testing.T) {
 		{
 			name: "3",
 			args: 123,
-			want: "7b",
+			want: "3f",
 		},
 		{
 			name: "4",
 			args: 90,
-			want: "5a",
+			want: "2i",
 		},
 		{
 			name: "5",
 			args: 10000,
-			want: "2710",
+			want: "7ps",
 		},
 		{
 			name: "6",
 			args: 1000000,
-			want: "f4240",
+			want: "lfls",
 		},
 	}
 	for _, tt := range tests {
@@ -70,25 +70,25 @@ func TestOriginal(t *testing.T) {
 		{
 			name:    "3",
 			want:    123,
-			args:    "7b",
+			args:    "3f",
 			wantErr: false,
 		},
 		{
 			name:    "4",
 			want:    90,
-			args:    "5a",
+			args:    "2i",
 			wantErr: false,
 		},
 		{
 			name:    "5",
 			want:    10000,
-			args:    "2710",
+			args:    "7ps",
 			wantErr: false,
 		},
 		{
 			name:    "6",
 			want:    1000000,
-			args:    "f4240",
+			args:    "lfls",
 			wantErr: false,
 		},
 	}
