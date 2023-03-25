@@ -13,16 +13,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"main/internal/app/config"
 	"main/internal/app/handlers"
 )
 
-type short struct {
-	Result string `json:"result"`
-}
+type (
+	short struct {
+		Result string `json:"result"`
+	}
 
-type some struct {
-	URL string `json:"url"`
-}
+	some struct {
+		URL string `json:"url"`
+	}
+)
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (int, string) {
 	t.Helper()
@@ -49,8 +52,15 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 }
 
 func TestServer(t *testing.T) {
+	c := config.GetConfig()
+
 	r := chi.NewRouter()
-	r.Get("/{id}", handlers.Get)
+
+	if c.BaseURL != "" {
+		r.Get("/"+c.BaseURL+"/{id}", handlers.Get)
+	} else {
+		r.Get("/{id}", handlers.Get)
+	}
 	r.Post("/", handlers.Post)
 	r.Post("/api/shorten", handlers.Shorten)
 	ts := httptest.NewServer(r)
@@ -64,27 +74,47 @@ func TestServer(t *testing.T) {
 
 	var n = 0
 	for i := 0; i < 25; i += 2 {
+		var expectedOne string
+		var expectedTwo string
+		var pathOne string
+		var pathTwo string
+		if c.BaseURL != "" {
+			expectedOne = "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
+			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)})
+			expectedTwo = string(marshal)
+			if err != nil {
+				log.Fatal(err)
+			}
+			pathOne = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
+			pathTwo = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)
+		} else {
+			expectedOne = "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i), 36)
+			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i+1), 36)})
+			expectedTwo = string(marshal)
+			if err != nil {
+				log.Fatal(err)
+			}
+			pathOne = "/" + strconv.FormatInt(int64(i), 36)
+			pathTwo = "/" + strconv.FormatInt(int64(i+1), 36)
+		}
+
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)
-		assert.Equal(t, "http://localhost:8080/"+strconv.FormatInt(int64(i), 36), actual)
+		assert.Equal(t, expectedOne, actual)
 
 		url, err := json.Marshal(some{URL: urls[n]})
 		if err != nil {
 			log.Fatal(err)
 		}
-		expected, err := json.Marshal(short{Result: "http://localhost:8080/" + strconv.FormatInt(int64(i+1), 36)})
-		if err != nil {
-			log.Fatal(err)
-		}
 		statusCode, actual = testRequest(t, ts, "POST", "/api/shorten", string(url))
 		assert.Equal(t, http.StatusCreated, statusCode)
-		assert.Equal(t, string(expected), actual)
+		assert.Equal(t, expectedTwo, actual)
 
-		statusCode, actual = testRequest(t, ts, "GET", "/"+strconv.FormatInt(int64(i), 36), "")
+		statusCode, actual = testRequest(t, ts, "GET", pathOne, "")
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.Equal(t, urls[n], actual)
 
-		statusCode, actual = testRequest(t, ts, "GET", "/"+strconv.FormatInt(int64(i+1), 36), "")
+		statusCode, actual = testRequest(t, ts, "GET", pathTwo, "")
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.Equal(t, urls[n], actual)
 

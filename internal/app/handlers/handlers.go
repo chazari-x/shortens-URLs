@@ -8,16 +8,19 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"main/internal/app/config"
 	"main/internal/app/storage"
 )
 
-type short struct {
-	Result string `json:"result"`
-}
+type (
+	short struct {
+		Result string `json:"result"`
+	}
 
-type some struct {
-	URL string `json:"url"`
-}
+	some struct {
+		URL string `json:"url"`
+	}
+)
 
 func Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/plain; charset=utf-8")
@@ -66,7 +69,13 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	_, err = w.Write([]byte("http://localhost:8080/" + string(id)))
+	c := config.GetConfig()
+
+	if c.BaseURL != "" {
+		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id))
+	} else {
+		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + id))
+	}
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -109,9 +118,18 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	marshal, err := json.Marshal(short{
-		Result: "http://localhost:8080/" + string(id),
-	})
+	c := config.GetConfig()
+
+	var marshal []byte
+	if c.BaseURL != "" {
+		marshal, err = json.Marshal(short{
+			Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id,
+		})
+	} else {
+		marshal, err = json.Marshal(short{
+			Result: "http://" + c.ServerAddress + "/" + id,
+		})
+	}
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
