@@ -38,11 +38,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer func(Body io.ReadCloser) {
-		if err = Body.Close(); err != nil {
-			require.NoError(t, err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	switch method {
 	case "GET":
