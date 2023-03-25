@@ -20,6 +20,8 @@ type some struct {
 }
 
 func Get(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "text/plain; charset=utf-8")
+
 	url, err := storage.GetOriginal(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
@@ -36,12 +38,13 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "text/plain; charset=utf-8")
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func Post(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "text/plain; charset=utf-8")
+
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Print(err)
@@ -61,20 +64,18 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusCreated)
+
 	_, err = w.Write([]byte("http://localhost:8080/" + string(id)))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("content-type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusCreated)
 }
 
 func Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -116,6 +117,8 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	w.WriteHeader(http.StatusCreated)
 
 	_, err = w.Write(marshal)
 	if err != nil {
