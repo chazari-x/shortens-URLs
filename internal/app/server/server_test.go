@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,6 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"main/internal/app/handlers"
 )
+
+type short struct {
+	Result string `json:"result"`
+}
+
+type some struct {
+	URL string `json:"url"`
+}
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (int, string) {
 	t.Helper()
@@ -28,7 +38,11 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		if err = Body.Close(); err != nil {
+			require.NoError(t, err)
+		}
+	}(resp.Body)
 
 	switch method {
 	case "GET":
@@ -42,6 +56,7 @@ func TestServer(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get("/{id}", handlers.Get)
 	r.Post("/", handlers.Post)
+	r.Post("/api/shorten", handlers.Shorten)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -52,12 +67,28 @@ func TestServer(t *testing.T) {
 	}
 
 	var n = 0
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 25; i += 2 {
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)
 		assert.Equal(t, "http://localhost:8080/"+strconv.FormatInt(int64(i), 36), actual)
 
+		url, err := json.Marshal(some{URL: urls[n]})
+		if err != nil {
+			log.Fatal(err)
+		}
+		expected, err := json.Marshal(short{Result: "http://localhost:8080/" + strconv.FormatInt(int64(i+1), 36)})
+		if err != nil {
+			log.Fatal(err)
+		}
+		statusCode, actual = testRequest(t, ts, "POST", "/api/shorten", string(url))
+		assert.Equal(t, http.StatusCreated, statusCode)
+		assert.Equal(t, string(expected), actual)
+
 		statusCode, actual = testRequest(t, ts, "GET", "/"+strconv.FormatInt(int64(i), 36), "")
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.Equal(t, urls[n], actual)
+
+		statusCode, actual = testRequest(t, ts, "GET", "/"+strconv.FormatInt(int64(i+1), 36), "")
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.Equal(t, urls[n], actual)
 
@@ -67,5 +98,4 @@ func TestServer(t *testing.T) {
 			n++
 		}
 	}
-
 }

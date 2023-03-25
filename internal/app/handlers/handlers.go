@@ -22,7 +22,7 @@ type some struct {
 func Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/plain; charset=utf-8")
 
-	url, err := storage.GetOriginal(chi.URLParam(r, "id"))
+	url, err := storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
