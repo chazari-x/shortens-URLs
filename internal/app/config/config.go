@@ -19,5 +19,9 @@ func GetConfig() Config {
 		log.Fatal(err)
 	}
 
+	if c.ServerAddress == "" {
+		c.ServerAddress = "localhost:8080"
+	}
+
 	return c
 }
