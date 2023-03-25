@@ -11,6 +11,7 @@ func StartSever() error {
 	r := chi.NewRouter()
 	r.Get("/{id}", handlers.Get)
 	r.Post("/", handlers.Post)
+	r.Post("/api/shorten", handlers.Shorten)
 
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		return err

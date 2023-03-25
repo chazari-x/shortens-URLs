@@ -27,13 +27,13 @@ func TestAddAndGet(t *testing.T) {
 			if gotAdd != tt.want {
 				t.Errorf("Add() got = %v, want %v", gotAdd, tt.want)
 			}
-			gotGet, err := Get(tt.want)
+			gotGet, err := GetOriginal(tt.want)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetOriginal() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if gotGet != tt.url {
-				t.Errorf("Get() got = %v, want %v", gotGet, tt.url)
+				t.Errorf("GetOriginal() got = %v, want %v", gotGet, tt.url)
 			}
 		})
 	}
