@@ -69,7 +69,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	c := config.GetConfig()
+	c := config.Conf
 
 	if c.BaseURL != "" {
 		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id))
@@ -118,7 +118,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := config.GetConfig()
+	c := config.Conf
 
 	var marshal []byte
 	if c.BaseURL != "" {

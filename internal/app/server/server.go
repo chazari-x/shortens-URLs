@@ -6,10 +6,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
 	"main/internal/app/handlers"
+	"main/internal/app/storage"
 )
 
 func StartSever() error {
-	c := config.GetConfig()
+	c := config.ParseConfig()
+
+	if c.FileStoragePath != "" {
+		err := storage.StartStorage()
+		if err != nil {
+			return err
+		}
+	}
 
 	r := chi.NewRouter()
 

@@ -7,21 +7,22 @@ import (
 )
 
 type Config struct {
-	ServerAddress string `env:"SERVER_ADDRESS"`
-	BaseURL       string `env:"BASE_URL"`
+	ServerAddress   string `env:"SERVER_ADDRESS"`
+	BaseURL         string `env:"BASE_URL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
-func GetConfig() Config {
-	var c Config
+var Conf Config
 
-	err := env.Parse(&c)
+func ParseConfig() Config {
+	err := env.Parse(&Conf)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if c.ServerAddress == "" {
-		c.ServerAddress = "localhost:8080"
+	if Conf.ServerAddress == "" {
+		Conf.ServerAddress = "localhost:8080"
 	}
 
-	return c
+	return Conf
 }

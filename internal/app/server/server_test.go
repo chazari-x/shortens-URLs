@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"main/internal/app/config"
 	"main/internal/app/handlers"
+	"main/internal/app/storage"
 )
 
 type (
@@ -52,7 +53,14 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 }
 
 func TestServer(t *testing.T) {
-	c := config.GetConfig()
+	c := config.Conf
+
+	if c.FileStoragePath != "" {
+		err := storage.StartStorage()
+		if err != nil {
+			log.Print(err)
+		}
+	}
 
 	r := chi.NewRouter()
 
