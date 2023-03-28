@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,12 +11,15 @@ import (
 )
 
 func StartSever() error {
-	c := config.ParseConfig()
+	c, err := config.ParseConfig()
+	if err != nil {
+		return fmt.Errorf("parse config err: %s", err)
+	}
 
 	if c.FileStoragePath != "" {
-		err := storage.StartStorage()
+		err := storage.StartStorage(c.FileStoragePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("start storage file path err: %s", err)
 		}
 	}
 

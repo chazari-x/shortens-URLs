@@ -56,7 +56,7 @@ func TestServer(t *testing.T) {
 	c := config.Conf
 
 	if c.FileStoragePath != "" {
-		err := storage.StartStorage()
+		err := storage.StartStorage(c.FileStoragePath)
 		if err != nil {
 			log.Print(err)
 		}

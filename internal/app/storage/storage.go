@@ -6,8 +6,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-
-	"main/internal/app/config"
 )
 
 var S struct {
@@ -69,17 +67,17 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func StartStorage() error {
-	S.file = config.Conf.FileStoragePath
+func StartStorage(FileStoragePath string) error {
+	S.file = FileStoragePath
 
 	consumer, err := NewConsumer(S.file)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer func(consumer *Consumer) {
 		err := consumer.Close()
 		if err != nil {
-			log.Print(err)
+			log.Print("consumer close err: ", err)
 		}
 	}(consumer)
 
@@ -88,7 +86,7 @@ func StartStorage() error {
 		if readEvent == nil {
 			break
 		} else if err != nil {
-			log.Print(err)
+			return err
 		}
 
 		S.ID++
@@ -106,12 +104,12 @@ func Add(url string) (string, error) {
 
 		producer, err := NewProducer(S.file)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
 		defer func(producer *Producer) {
 			err := producer.Close()
 			if err != nil {
-				log.Print(err)
+				log.Print("producer close err: ", err)
 			}
 		}(producer)
 
@@ -143,19 +141,19 @@ func Get(s string) (string, error) {
 
 		consumer, err := NewConsumer(S.file)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
 		defer func(consumer *Consumer) {
 			err := consumer.Close()
 			if err != nil {
-				log.Print(err)
+				log.Print("consumer close err: ", err)
 			}
 		}(consumer)
 
 		for i := 0; i <= S.ID; i++ {
 			readEvent, err := consumer.ReadEvent()
 			if err != nil {
-				log.Print(err)
+				return "", err
 			}
 
 			if readEvent.ID == s {
