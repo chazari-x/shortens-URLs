@@ -34,9 +34,11 @@ func NewProducer(fileName string) (*Producer, error) {
 		encoder: json.NewEncoder(file),
 	}, nil
 }
+
 func (p *Producer) WriteEvent(event *Event) error {
 	return p.encoder.Encode(&event)
 }
+
 func (p *Producer) Close() error {
 	return p.file.Close()
 }
@@ -56,6 +58,7 @@ func NewConsumer(fileName string) (*Consumer, error) {
 		decoder: json.NewDecoder(file),
 	}, nil
 }
+
 func (c *Consumer) ReadEvent() (*Event, error) {
 	event := &Event{}
 	if err := c.decoder.Decode(&event); err != nil {
@@ -63,6 +66,7 @@ func (c *Consumer) ReadEvent() (*Event, error) {
 	}
 	return event, nil
 }
+
 func (c *Consumer) Close() error {
 	return c.file.Close()
 }
@@ -98,31 +102,33 @@ func StartStorage(FileStoragePath string) error {
 func Add(url string) (string, error) {
 	var id string
 
-	if S.file != "" {
-		id = strconv.FormatInt(int64(S.ID), 36)
-		S.ID++
-
-		producer, err := NewProducer(S.file)
-		if err != nil {
-			return "", err
-		}
-		defer func(producer *Producer) {
-			err := producer.Close()
-			if err != nil {
-				log.Print("producer close err: ", err)
-			}
-		}(producer)
-
-		err = producer.WriteEvent(&Event{
-			ID:  id,
-			URL: url,
-		})
-		if err != nil {
-			return "", err
-		}
-	} else {
+	if S.file == "" {
 		id = strconv.FormatInt(int64(len(S.URLs)), 36)
 		S.URLs = append(S.URLs, url)
+
+		return id, nil
+	}
+
+	id = strconv.FormatInt(int64(S.ID), 36)
+	S.ID++
+
+	producer, err := NewProducer(S.file)
+	if err != nil {
+		return "", err
+	}
+	defer func(producer *Producer) {
+		err := producer.Close()
+		if err != nil {
+			log.Print("producer close err: ", err)
+		}
+	}(producer)
+
+	err = producer.WriteEvent(&Event{
+		ID:  id,
+		URL: url,
+	})
+	if err != nil {
+		return "", err
 	}
 
 	return id, nil
@@ -134,38 +140,38 @@ func Get(s string) (string, error) {
 		return "", err
 	}
 
-	if S.file != "" {
-		if int(id) >= S.ID {
-			return "", fmt.Errorf("the storage is empty or the element is missing")
-		}
-
-		consumer, err := NewConsumer(S.file)
-		if err != nil {
-			return "", err
-		}
-		defer func(consumer *Consumer) {
-			err := consumer.Close()
-			if err != nil {
-				log.Print("consumer close err: ", err)
-			}
-		}(consumer)
-
-		for i := 0; i <= S.ID; i++ {
-			readEvent, err := consumer.ReadEvent()
-			if err != nil {
-				return "", err
-			}
-
-			if readEvent.ID == s {
-				return readEvent.URL, nil
-			}
-		}
-	} else {
+	if S.file == "" {
 		if int(id) >= len(S.URLs) {
 			return "", fmt.Errorf("the storage is empty or the element is missing")
 		}
 
 		return S.URLs[int(id)], nil
+	}
+
+	if int(id) >= S.ID {
+		return "", fmt.Errorf("the storage is empty or the element is missing")
+	}
+
+	consumer, err := NewConsumer(S.file)
+	if err != nil {
+		return "", err
+	}
+	defer func(consumer *Consumer) {
+		err := consumer.Close()
+		if err != nil {
+			log.Print("consumer close err: ", err)
+		}
+	}(consumer)
+
+	for i := 0; i <= S.ID; i++ {
+		readEvent, err := consumer.ReadEvent()
+		if err != nil {
+			return "", err
+		}
+
+		if readEvent.ID == s {
+			return readEvent.URL, nil
+		}
 	}
 
 	return "", fmt.Errorf("the storage is empty or the element is missing")

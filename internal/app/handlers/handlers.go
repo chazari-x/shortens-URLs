@@ -37,14 +37,15 @@ func GzipHandle(next http.Handler) http.Handler {
 		if r.Header.Get("Content-Encoding") == "gzip" {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				log.Print("GZIP: new reader err:", err)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
 			defer func(gz *gzip.Reader) {
 				err := gz.Close()
 				if err != nil {
-					log.Print("gzip reader err:", err)
+					log.Print("GZIP: defer func reader err:", err)
 				}
 			}(gz)
 
@@ -58,17 +59,15 @@ func GzipHandle(next http.Handler) http.Handler {
 
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			_, err := io.WriteString(w, err.Error())
-			if err != nil {
-				log.Print("gzip - write string err:", err)
-			}
+			log.Print("GZIP: new writer level err:", err)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		defer func(gz *gzip.Writer) {
 			err := gz.Close()
 			if err != nil {
-				log.Print("defer gzip.Writer err:", err)
+				log.Print("GZIP: defer writer err:", err)
 			}
 		}(gz)
 
@@ -78,7 +77,7 @@ func GzipHandle(next http.Handler) http.Handler {
 }
 
 func Get(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("content-type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 	url, err := storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
@@ -86,7 +85,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Print(err)
+		log.Print("GET: get err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -101,11 +100,11 @@ func Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func Post(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("content-type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print(err)
+		log.Print("POST: read all err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -117,7 +116,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	id, err := storage.Add(string(b))
 	if err != nil {
-		log.Print(err)
+		log.Print("POST: add err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -139,11 +138,11 @@ func Post(w http.ResponseWriter, r *http.Request) {
 }
 
 func Shorten(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("content-type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print(err)
+		log.Print("SHORTEN: read all err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -157,7 +156,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &url)
 	if err != nil {
-		log.Print(err)
+		log.Print("SHORTEN: json unmarshal err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -168,7 +167,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Print(err)
+		log.Print("SHORTEN: add err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -186,7 +185,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err != nil {
-		log.Print(err)
+		log.Print("SHORTEN: json marshal err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -195,7 +194,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 
 	_, err = w.Write(marshal)
 	if err != nil {
-		log.Print(err)
+		log.Print("SHORTEN: write err:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
