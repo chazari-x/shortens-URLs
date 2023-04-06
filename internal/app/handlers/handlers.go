@@ -2,11 +2,16 @@ package handlers
 
 import (
 	"compress/gzip"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
@@ -30,6 +35,44 @@ type gzipWriter struct {
 
 func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
+}
+
+func generateRandom(size int) ([]byte, error) {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func setUserIdentification() (string, error) {
+	str := time.Now().Format("02012006150405")
+
+	key, err := generateRandom(aes.BlockSize)
+	if err != nil {
+		return "", err
+	}
+
+	aesblock, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	aesgcm, err := cipher.NewGCM(aesblock)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := generateRandom(aesgcm.NonceSize())
+	if err != nil {
+		return "", err
+	}
+
+	id := fmt.Sprintf("%x", aesgcm.Seal(nil, nonce, []byte(str), nil))
+
+	return id, nil
 }
 
 func GzipHandle(next http.Handler) http.Handler {
@@ -102,25 +145,34 @@ func Get(w http.ResponseWriter, r *http.Request) {
 func Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
+	var uid string
+
 	cookie, err := r.Cookie("user_identification")
 	if err != nil {
 		if !strings.Contains(err.Error(), "named cookie not present") {
-			log.Print("r.Cookie err: ", err)
+			log.Print("POST: r.Cookie err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		uid, err = setUserIdentification()
+		if err != nil {
+			log.Print("POST: set user identification err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		http.SetCookie(w, &http.Cookie{
-			Name:  "user_identification",
-			Value: "sessionToken.String()", // TODO
+			Name:     "user_identification",
+			Value:    uid,
+			Path:     "/",
+			MaxAge:   3600,
+			HttpOnly: false,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
 		})
-
-		cookie, err = r.Cookie("user_identification")
-		if err != nil {
-			log.Print("r.Cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+	} else {
+		uid = cookie.Value
 	}
 
 	b, err := io.ReadAll(r.Body)
@@ -135,7 +187,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := storage.Add(string(b), cookie.Value)
+	id, err := storage.Add(string(b), uid)
 	if err != nil {
 		log.Print("POST: add err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -146,11 +198,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	c := config.Conf
 
-	if c.BaseURL != "" {
-		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id))
-	} else {
-		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + id))
-	}
+	_, err = w.Write([]byte("http://" + c.ServerAddress + c.BaseURL + id))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -161,6 +209,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 func Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	var uid string
+
 	cookie, err := r.Cookie("user_identification")
 	if err != nil {
 		if !strings.Contains(err.Error(), "named cookie not present") {
@@ -169,17 +219,24 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.SetCookie(w, &http.Cookie{
-			Name:  "user_identification",
-			Value: "sessionToken.String()", // TODO
-		})
-
-		cookie, err = r.Cookie("user_identification")
+		uid, err = setUserIdentification()
 		if err != nil {
-			log.Print("r.Cookie err: ", err)
+			log.Print("POST: set user identification err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "user_identification",
+			Value:    uid,
+			Path:     "/",
+			MaxAge:   3600,
+			HttpOnly: false,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
+		})
+	} else {
+		uid = cookie.Value
 	}
 
 	b, err := io.ReadAll(r.Body)
@@ -203,7 +260,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := storage.Add(url.URL, cookie.Value)
+	id, err := storage.Add(url.URL, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -216,16 +273,9 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 
 	c := config.Conf
 
-	var marshal []byte
-	if c.BaseURL != "" {
-		marshal, err = json.Marshal(short{
-			Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id,
-		})
-	} else {
-		marshal, err = json.Marshal(short{
-			Result: "http://" + c.ServerAddress + "/" + id,
-		})
-	}
+	marshal, err := json.Marshal(short{
+		Result: "http://" + c.ServerAddress + c.BaseURL + id,
+	})
 	if err != nil {
 		log.Print("SHORTEN: json marshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -257,7 +307,9 @@ func UserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	URLs, err := storage.GetAll(cookie.Value)
+	c := config.Conf
+
+	URLs, err := storage.GetAll(cookie.Value, c.ServerAddress, c.BaseURL)
 	if err != nil {
 		log.Print("UserURLs: GetAll err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -277,6 +329,4 @@ func UserURLs(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }

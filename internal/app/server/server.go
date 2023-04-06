@@ -25,16 +25,12 @@ func StartSever() error {
 
 	r := chi.NewRouter()
 
-	if c.BaseURL != "" {
-		r.Get("/"+c.BaseURL+"/{id}", handlers.Get)
-	} else {
-		r.Get("/{id}", handlers.Get)
-	}
+	r.Get("/"+c.BaseURL+"{id}", handlers.Get)
 	r.Get("/api/user/urls", handlers.UserURLs)
 	r.Post("/", handlers.Post)
 	r.Post("/api/shorten", handlers.Shorten)
 
-	if err := http.ListenAndServe(c.ServerAddress, handlers.GzipHandle(r)); err != nil {
+	if err := http.ListenAndServe(c.ServerAddress[:len(c.ServerAddress)-1], handlers.GzipHandle(r)); err != nil {
 		return err
 	}
 

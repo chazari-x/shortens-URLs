@@ -43,5 +43,13 @@ func ParseConfig() (Config, error) {
 		Conf.ServerAddress = "localhost:8080"
 	}
 
+	if Conf.ServerAddress != "" {
+		Conf.ServerAddress += "/"
+	}
+
+	if Conf.BaseURL != "" {
+		Conf.BaseURL += "/"
+	}
+
 	return Conf, nil
 }

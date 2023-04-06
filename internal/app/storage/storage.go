@@ -163,14 +163,14 @@ func Get(str string) (string, error) {
 	}
 
 	if s.File == "" {
-		if int(id) >= len(s.URLs) {
+		if int(id) > s.ID {
 			return "", fmt.Errorf("the storage is empty or the element is missing")
 		}
 
 		return s.URLs[int(id)].URL, nil
 	}
 
-	if int(id) >= s.ID {
+	if int(id) > s.ID {
 		return "", fmt.Errorf("the storage is empty or the element is missing")
 	}
 
@@ -185,9 +185,11 @@ func Get(str string) (string, error) {
 		}
 	}()
 
-	for i := 0; i <= s.ID; i++ {
+	for i := 0; ; i++ {
 		readEvent, err := consumer.ReadEvent()
-		if err != nil {
+		if readEvent == nil {
+			break
+		} else if err != nil {
 			return "", err
 		}
 
@@ -199,7 +201,7 @@ func Get(str string) (string, error) {
 	return "", fmt.Errorf("the storage is empty or the element is missing")
 }
 
-func GetAll(user string) ([]URLs, error) {
+func GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 	var UserURLs []URLs
 	if s.File == "" {
 		for _, i := range s.URLs {
@@ -225,16 +227,18 @@ func GetAll(user string) ([]URLs, error) {
 		}
 	}()
 
-	for i := 0; i <= s.ID; i++ {
-		r, err := consumer.ReadEvent()
-		if err != nil {
+	for i := 0; ; i++ {
+		readEvent, err := consumer.ReadEvent()
+		if readEvent == nil {
+			break
+		} else if err != nil {
 			return UserURLs, err
 		}
 
-		if r.User == user {
+		if readEvent.User == user {
 			UserURLs = append(UserURLs, URLs{
-				ShortURL:    r.ID,
-				OriginalURL: r.URL,
+				ShortURL:    "http://" + serverAddress + baseURL + readEvent.ID,
+				OriginalURL: readEvent.URL,
 			})
 		}
 	}

@@ -42,7 +42,9 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	switch method {
 	case "GET":
@@ -64,11 +66,7 @@ func TestServer(t *testing.T) {
 
 	r := chi.NewRouter()
 
-	if c.BaseURL != "" {
-		r.Get("/"+c.BaseURL+"/{id}", handlers.Get)
-	} else {
-		r.Get("/{id}", handlers.Get)
-	}
+	r.Get("/"+c.BaseURL+"{id}", handlers.Get)
 	r.Post("/", handlers.Post)
 	r.Post("/api/shorten", handlers.Shorten)
 	ts := httptest.NewServer(r)
