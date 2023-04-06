@@ -211,7 +211,7 @@ func GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 		for _, i := range s.URLs {
 			if i.User == user {
 				UserURLs = append(UserURLs, URLs{
-					ShortURL:    i.ID,
+					ShortURL:    "http://" + serverAddress + baseURL + i.ID,
 					OriginalURL: i.URL,
 				})
 			}
