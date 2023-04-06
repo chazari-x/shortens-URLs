@@ -30,6 +30,7 @@ func StartSever() error {
 	} else {
 		r.Get("/{id}", handlers.Get)
 	}
+	r.Get("/api/user/urls", handlers.UserURLs)
 	r.Post("/", handlers.Post)
 	r.Post("/api/shorten", handlers.Shorten)
 

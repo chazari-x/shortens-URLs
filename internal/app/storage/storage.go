@@ -9,14 +9,20 @@ import (
 )
 
 var s struct {
-	File string   // Путь до файла хранилища
-	URLs []string // Массив URL'ов. Используется, если File не прописан
-	ID   int      // Это ID следующего добавляемого элемента в хранилище
+	File string        // Путь до файла хранилища
+	URLs map[int]Event // Используется, если File не прописан
+	ID   int           // Это ID последнего элемента в хранилище
 }
 
 type Event struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
+	ID   string `json:"id"`
+	URL  string `json:"url"`
+	User string `json:"user"`
+}
+
+type URLs struct {
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
 }
 
 type producer struct {
@@ -85,6 +91,8 @@ func StartStorage(FileStoragePath string) error {
 		}
 	}()
 
+	s.ID = -1
+	maxID := "-1"
 	for i := 0; ; i++ {
 		readEvent, err := consumer.ReadEvent()
 		if readEvent == nil {
@@ -93,24 +101,37 @@ func StartStorage(FileStoragePath string) error {
 			return err
 		}
 
-		s.ID++
+		maxID = readEvent.ID
+	}
+
+	if maxID != "-1" {
+		id, err := strconv.ParseInt(maxID, 36, 64)
+		if err != nil {
+			return err
+		}
+
+		s.ID = int(id)
 	}
 
 	return nil
 }
 
-func Add(url string) (string, error) {
+func Add(url, user string) (string, error) {
 	var id string
+	s.ID++
 
 	if s.File == "" {
 		id = strconv.FormatInt(int64(len(s.URLs)), 36)
-		s.URLs = append(s.URLs, url)
+		s.URLs[s.ID] = Event{
+			ID:   id,
+			URL:  url,
+			User: user,
+		}
 
 		return id, nil
 	}
 
 	id = strconv.FormatInt(int64(s.ID), 36)
-	s.ID++
 
 	producer, err := newProducer(s.File)
 	if err != nil {
@@ -124,8 +145,9 @@ func Add(url string) (string, error) {
 	}()
 
 	err = producer.WriteEvent(&Event{
-		ID:  id,
-		URL: url,
+		ID:   id,
+		URL:  url,
+		User: user,
 	})
 	if err != nil {
 		return "", err
@@ -145,7 +167,7 @@ func Get(str string) (string, error) {
 			return "", fmt.Errorf("the storage is empty or the element is missing")
 		}
 
-		return s.URLs[int(id)], nil
+		return s.URLs[int(id)].URL, nil
 	}
 
 	if int(id) >= s.ID {
@@ -175,4 +197,47 @@ func Get(str string) (string, error) {
 	}
 
 	return "", fmt.Errorf("the storage is empty or the element is missing")
+}
+
+func GetAll(user string) ([]URLs, error) {
+	var UserURLs []URLs
+	if s.File == "" {
+		for _, i := range s.URLs {
+			if i.User == user {
+				UserURLs = append(UserURLs, URLs{
+					ShortURL:    i.ID,
+					OriginalURL: i.URL,
+				})
+			}
+		}
+
+		return UserURLs, nil
+	}
+
+	consumer, err := newConsumer(s.File)
+	if err != nil {
+		return UserURLs, err
+	}
+	defer func() {
+		err := consumer.Close()
+		if err != nil {
+			log.Print("consumer close err: ", err)
+		}
+	}()
+
+	for i := 0; i <= s.ID; i++ {
+		r, err := consumer.ReadEvent()
+		if err != nil {
+			return UserURLs, err
+		}
+
+		if r.User == user {
+			UserURLs = append(UserURLs, URLs{
+				ShortURL:    r.ID,
+				OriginalURL: r.URL,
+			})
+		}
+	}
+
+	return UserURLs, nil
 }

@@ -19,7 +19,7 @@ func TestAddAndGet(t *testing.T) {
 			wantErr: false,
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			gotAdd, err := Add(tt.url)
+			gotAdd, err := Add(tt.url, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Add() error = %v, wantErr %v", err, tt.wantErr)
 				return
