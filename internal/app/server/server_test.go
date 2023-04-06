@@ -72,37 +72,22 @@ func TestServer(t *testing.T) {
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
-	var urls = []string{"https://pkg.go.dev/net/http@go1.17.2",
-		"https://pkg.go.dev/net/http@go1.17.2",
-		"https://github.com/chazari-x/shortens-URLs/pull/2",
-		"https://github.com/golang-standards/project-layout/blob/master/README_ru.md",
+	var urls = []string{"https://m.vk.com/login?slogin_h=9c4b5dff2b9d2ec030.187f50f7956785726a&role=fast&to=ZmVlZA--",
+		"https://ok.ru/dk?st.cmd=anonymMain",
+		"https://www.google.ru/",
+		"https://github.com/chazari-x/shortens-URLs/actions/runs/4631562598/jobs/8194566021?pr=9",
 	}
 
 	var n = 0
 	for i := 0; i < 25; i += 2 {
-		var expectedOne string
-		var expectedTwo string
-		var pathOne string
-		var pathTwo string
-		if c.BaseURL != "" {
-			expectedOne = "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
-			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)})
-			expectedTwo = string(marshal)
-			if err != nil {
-				log.Fatal(err)
-			}
-			pathOne = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
-			pathTwo = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)
-		} else {
-			expectedOne = "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i), 36)
-			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i+1), 36)})
-			expectedTwo = string(marshal)
-			if err != nil {
-				log.Fatal(err)
-			}
-			pathOne = "/" + strconv.FormatInt(int64(i), 36)
-			pathTwo = "/" + strconv.FormatInt(int64(i+1), 36)
+		expectedOne := "http://" + c.ServerAddress + c.BaseURL + strconv.FormatInt(int64(i), 36)
+		marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + c.BaseURL + strconv.FormatInt(int64(i+1), 36)})
+		expectedTwo := string(marshal)
+		if err != nil {
+			log.Fatal(err)
 		}
+		pathOne := "/" + c.BaseURL + strconv.FormatInt(int64(i), 36)
+		pathTwo := "/" + c.BaseURL + strconv.FormatInt(int64(i+1), 36)
 
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)

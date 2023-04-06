@@ -25,7 +25,7 @@ var f flagConfig
 func init() {
 	f.ServerAddress = flag.String("a", "localhost:8080", "server address")
 	f.BaseURL = flag.String("b", "sh", "base url")
-	f.FileStoragePath = flag.String("f", "internal/app/storage/storage.txt", "file storage path")
+	f.FileStoragePath = flag.String("f", "", "file storage path")
 }
 
 func ParseConfig() (Config, error) {

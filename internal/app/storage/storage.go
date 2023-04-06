@@ -30,6 +30,11 @@ type producer struct {
 	encoder *json.Encoder
 }
 
+func init() {
+	s.ID = -1
+	s.URLs = make(map[int]Event)
+}
+
 func newProducer(fileName string) (*producer, error) {
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
@@ -91,7 +96,6 @@ func StartStorage(FileStoragePath string) error {
 		}
 	}()
 
-	s.ID = -1
 	maxID := "-1"
 	for i := 0; ; i++ {
 		readEvent, err := consumer.ReadEvent()
@@ -121,7 +125,7 @@ func Add(url, user string) (string, error) {
 	s.ID++
 
 	if s.File == "" {
-		id = strconv.FormatInt(int64(len(s.URLs)), 36)
+		id = strconv.FormatInt(int64(s.ID), 36)
 		s.URLs[s.ID] = Event{
 			ID:   id,
 			URL:  url,
