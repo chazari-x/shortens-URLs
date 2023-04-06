@@ -42,9 +42,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	switch method {
 	case "GET":
