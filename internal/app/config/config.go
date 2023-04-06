@@ -14,25 +14,25 @@ type Config struct {
 
 var Conf Config
 
-type Flag struct {
+type flagConfig struct {
 	ServerAddress   *string
 	BaseURL         *string
 	FileStoragePath *string
 }
 
-var F Flag
+var f flagConfig
 
 func init() {
-	F.ServerAddress = flag.String("a", "localhost:8080", "server address")
-	F.BaseURL = flag.String("b", "sh", "base url")
-	F.FileStoragePath = flag.String("f", "internal/app/storage/storage.txt", "file storage path")
+	f.ServerAddress = flag.String("a", "localhost:8080", "server address")
+	f.BaseURL = flag.String("b", "sh", "base url")
+	f.FileStoragePath = flag.String("f", "internal/app/storage/storage.txt", "file storage path")
 }
 
 func ParseConfig() (Config, error) {
 	flag.Parse()
-	Conf.ServerAddress = *F.ServerAddress
-	Conf.FileStoragePath = *F.FileStoragePath
-	Conf.BaseURL = *F.BaseURL
+	Conf.ServerAddress = *f.ServerAddress
+	Conf.FileStoragePath = *f.FileStoragePath
+	Conf.BaseURL = *f.BaseURL
 
 	err := env.Parse(&Conf)
 	if err != nil {

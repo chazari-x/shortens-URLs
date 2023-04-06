@@ -18,7 +18,7 @@ type (
 		Result string `json:"result"`
 	}
 
-	some struct {
+	original struct {
 		URL string `json:"url"`
 	}
 )
@@ -34,7 +34,7 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 
 func GzipHandle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Content-Encoding") == "gzip" {
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
 				log.Print("GZIP: new reader err:", err)
@@ -42,12 +42,12 @@ func GzipHandle(next http.Handler) http.Handler {
 				return
 			}
 
-			defer func(gz *gzip.Reader) {
+			defer func() {
 				err := gz.Close()
 				if err != nil {
 					log.Print("GZIP: defer func reader err:", err)
 				}
-			}(gz)
+			}()
 
 			r.Body = gz
 		}
@@ -64,12 +64,12 @@ func GzipHandle(next http.Handler) http.Handler {
 			return
 		}
 
-		defer func(gz *gzip.Writer) {
+		defer func() {
 			err := gz.Close()
 			if err != nil {
 				log.Print("GZIP: defer writer err:", err)
 			}
-		}(gz)
+		}()
 
 		w.Header().Set("Content-Encoding", "gzip")
 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
@@ -152,7 +152,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := some{}
+	url := original{}
 
 	err = json.Unmarshal(b, &url)
 	if err != nil {
