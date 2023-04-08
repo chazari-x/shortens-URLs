@@ -28,13 +28,12 @@ type (
 	}
 )
 
-type gzipWriter struct {
-	http.ResponseWriter
-	Writer io.Writer
+type Controller struct {
+	storage storage.Storage
 }
 
-func (w gzipWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
+func NewController(s storage.Storage) *Controller {
+	return &Controller{storage: s}
 }
 
 func generateRandom(size int) ([]byte, error) {
@@ -75,7 +74,16 @@ func setUserIdentification() (string, error) {
 	return id, nil
 }
 
-func GzipHandle(next http.Handler) http.Handler {
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (c *Controller) GzipHandle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(r.Body)
@@ -86,10 +94,7 @@ func GzipHandle(next http.Handler) http.Handler {
 			}
 
 			defer func() {
-				err := gz.Close()
-				if err != nil {
-					log.Print("GZIP: defer func reader err: ", err)
-				}
+				_ = gz.Close()
 			}()
 
 			r.Body = gz
@@ -108,10 +113,7 @@ func GzipHandle(next http.Handler) http.Handler {
 		}
 
 		defer func() {
-			err := gz.Close()
-			if err != nil {
-				log.Print("GZIP: defer writer err: ", err)
-			}
+			_ = gz.Close()
 		}()
 
 		w.Header().Set("Content-Encoding", "gzip")
@@ -119,10 +121,10 @@ func GzipHandle(next http.Handler) http.Handler {
 	})
 }
 
-func Get(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	url, err := storage.Get(chi.URLParam(r, "id"))
+	url, err := c.storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -142,7 +144,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func Post(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 	var uid string
@@ -187,7 +189,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := storage.Add(string(b), uid)
+	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
 		log.Print("POST: add err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -196,9 +198,9 @@ func Post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	c := config.Conf
+	conf := config.Conf
 
-	_, err = w.Write([]byte("http://" + c.ServerAddress + c.BaseURL + id))
+	_, err = w.Write([]byte("http://" + conf.ServerAddress + conf.BaseURL + id))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -206,7 +208,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Shorten(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var uid string
@@ -260,7 +262,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := storage.Add(url.URL, uid)
+	id, err := c.storage.Add(url.URL, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -271,10 +273,10 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := config.Conf
+	conf := config.Conf
 
 	marshal, err := json.Marshal(short{
-		Result: "http://" + c.ServerAddress + c.BaseURL + id,
+		Result: "http://" + conf.ServerAddress + conf.BaseURL + id,
 	})
 	if err != nil {
 		log.Print("SHORTEN: json marshal err: ", err)
@@ -292,7 +294,7 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func UserURLs(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	cookie, err := r.Cookie("user_identification")
@@ -307,9 +309,9 @@ func UserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := config.Conf
+	conf := config.Conf
 
-	URLs, err := storage.GetAll(cookie.Value, c.ServerAddress, c.BaseURL)
+	URLs, err := c.storage.GetAll(cookie.Value, conf.ServerAddress, conf.BaseURL)
 	if err != nil {
 		log.Print("UserURLs: GetAll err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)

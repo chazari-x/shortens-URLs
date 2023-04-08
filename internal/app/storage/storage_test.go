@@ -6,6 +6,8 @@ import (
 )
 
 func TestAddAndGet(t *testing.T) {
+	c := NewStorageModel("")
+
 	for i := 0; i < 25; i++ {
 		tt := struct {
 			name    string
@@ -19,7 +21,7 @@ func TestAddAndGet(t *testing.T) {
 			wantErr: false,
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			gotAdd, err := Add(tt.url, "")
+			gotAdd, err := c.Add(tt.url, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Add() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -27,7 +29,7 @@ func TestAddAndGet(t *testing.T) {
 			if gotAdd != tt.want {
 				t.Errorf("Add() got = %v, want %v", gotAdd, tt.want)
 			}
-			gotGet, err := Get(tt.want)
+			gotGet, err := c.Get(tt.want)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
 				return

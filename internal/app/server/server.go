@@ -11,28 +11,24 @@ import (
 )
 
 func StartSever() error {
-	c, err := config.ParseConfig()
+	conf, err := config.ParseConfig()
 	if err != nil {
 		return fmt.Errorf("parse config err: %s", err)
 	}
 
-	if c.FileStoragePath != "" {
-		err := storage.StartStorage(c.FileStoragePath)
-		if err != nil {
-			return fmt.Errorf("start storage file path err: %s", err)
-		}
+	cModel := storage.NewStorageModel(conf.FileStoragePath)
+	err = cModel.StartStorage()
+	if err != nil {
+		return fmt.Errorf("start storage file path err: %s", err)
 	}
+
+	c := handlers.NewController(cModel)
 
 	r := chi.NewRouter()
+	r.Get("/"+conf.BaseURL+"{id}", c.Get)
+	r.Get("/api/user/urls", c.UserURLs)
+	r.Post("/", c.Post)
+	r.Post("/api/shorten", c.Shorten)
 
-	r.Get("/"+c.BaseURL+"{id}", handlers.Get)
-	r.Get("/api/user/urls", handlers.UserURLs)
-	r.Post("/", handlers.Post)
-	r.Post("/api/shorten", handlers.Shorten)
-
-	if err := http.ListenAndServe(c.ServerAddress[:len(c.ServerAddress)-1], handlers.GzipHandle(r)); err != nil {
-		return err
-	}
-
-	return nil
+	return http.ListenAndServe(conf.ServerAddress[:len(conf.ServerAddress)-1], c.GzipHandle(r))
 }

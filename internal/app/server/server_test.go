@@ -23,7 +23,7 @@ type (
 		Result string `json:"result"`
 	}
 
-	some struct {
+	original struct {
 		URL string `json:"url"`
 	}
 )
@@ -42,7 +42,9 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	switch method {
 	case "GET":
@@ -53,20 +55,21 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 }
 
 func TestServer(t *testing.T) {
-	c := config.Conf
+	conf := config.Conf
 
-	if c.FileStoragePath != "" {
-		err := storage.StartStorage(c.FileStoragePath)
-		if err != nil {
-			log.Print(err)
-		}
+	cModel := storage.NewStorageModel(conf.FileStoragePath)
+	err := cModel.StartStorage()
+	if err != nil {
+		log.Print("start storage file path err: ", err)
 	}
 
-	r := chi.NewRouter()
+	c := handlers.NewController(cModel)
 
-	r.Get("/"+c.BaseURL+"{id}", handlers.Get)
-	r.Post("/", handlers.Post)
-	r.Post("/api/shorten", handlers.Shorten)
+	r := chi.NewRouter()
+	r.Get("/"+conf.BaseURL+"{id}", c.Get)
+	r.Get("/api/user/urls", c.UserURLs)
+	r.Post("/", c.Post)
+	r.Post("/api/shorten", c.Shorten)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -78,20 +81,20 @@ func TestServer(t *testing.T) {
 
 	var n = 0
 	for i := 0; i < 25; i += 2 {
-		expectedOne := "http://" + c.ServerAddress + c.BaseURL + strconv.FormatInt(int64(i), 36)
-		marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + c.BaseURL + strconv.FormatInt(int64(i+1), 36)})
+		expectedOne := "http://" + conf.ServerAddress + conf.BaseURL + strconv.FormatInt(int64(i), 36)
+		marshal, err := json.Marshal(short{Result: "http://" + conf.ServerAddress + conf.BaseURL + strconv.FormatInt(int64(i+1), 36)})
 		expectedTwo := string(marshal)
 		if err != nil {
 			log.Fatal(err)
 		}
-		pathOne := "/" + c.BaseURL + strconv.FormatInt(int64(i), 36)
-		pathTwo := "/" + c.BaseURL + strconv.FormatInt(int64(i+1), 36)
+		pathOne := "/" + conf.BaseURL + strconv.FormatInt(int64(i), 36)
+		pathTwo := "/" + conf.BaseURL + strconv.FormatInt(int64(i+1), 36)
 
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)
 		assert.Equal(t, expectedOne, actual)
 
-		url, err := json.Marshal(some{URL: urls[n]})
+		url, err := json.Marshal(original{URL: urls[n]})
 		if err != nil {
 			log.Fatal(err)
 		}

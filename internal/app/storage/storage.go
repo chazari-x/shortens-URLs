@@ -3,12 +3,17 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 )
 
-var s struct {
+type Storage interface {
+	Add(url, user string) (string, error)
+	Get(str string) (string, error)
+	GetAll(user, serverAddress, baseURL string) ([]URLs, error)
+}
+
+type S struct {
 	File string        // Путь до файла хранилища
 	URLs map[int]Event // Используется, если File не прописан
 	ID   int           // Это ID последнего элемента в хранилище
@@ -30,11 +35,6 @@ type producer struct {
 	encoder *json.Encoder
 }
 
-func init() {
-	s.ID = -1
-	s.URLs = make(map[int]Event)
-}
-
 func newProducer(fileName string) (*producer, error) {
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
@@ -46,7 +46,7 @@ func newProducer(fileName string) (*producer, error) {
 	}, nil
 }
 
-func (p *producer) WriteEvent(event *Event) error {
+func (p *producer) WriteEvent(event Event) error {
 	return p.encoder.Encode(&event)
 }
 
@@ -64,6 +64,7 @@ func newConsumer(fileName string) (*Consumer, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Consumer{
 		file:    file,
 		decoder: json.NewDecoder(file),
@@ -82,18 +83,22 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func StartStorage(FileStoragePath string) error {
-	s.File = FileStoragePath
+func NewStorageModel(FileStoragePath string) *S {
+	return &S{File: FileStoragePath, URLs: make(map[int]Event), ID: -1}
+}
+
+func (s *S) StartStorage() error {
+	if s.File == "" {
+		return nil
+	}
 
 	consumer, err := newConsumer(s.File)
 	if err != nil {
 		return err
 	}
+
 	defer func() {
-		err := consumer.Close()
-		if err != nil {
-			log.Print("consumer close err: ", err)
-		}
+		_ = consumer.Close()
 	}()
 
 	maxID := "-1"
@@ -120,7 +125,7 @@ func StartStorage(FileStoragePath string) error {
 	return nil
 }
 
-func Add(url, user string) (string, error) {
+func (s *S) Add(url, user string) (string, error) {
 	var id string
 	s.ID++
 
@@ -142,13 +147,10 @@ func Add(url, user string) (string, error) {
 		return "", err
 	}
 	defer func() {
-		err := producer.Close()
-		if err != nil {
-			log.Print("producer close err: ", err)
-		}
+		_ = producer.Close()
 	}()
 
-	err = producer.WriteEvent(&Event{
+	err = producer.WriteEvent(Event{
 		ID:   id,
 		URL:  url,
 		User: user,
@@ -160,7 +162,7 @@ func Add(url, user string) (string, error) {
 	return id, nil
 }
 
-func Get(str string) (string, error) {
+func (s *S) Get(str string) (string, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
 		return "", err
@@ -183,10 +185,7 @@ func Get(str string) (string, error) {
 		return "", err
 	}
 	defer func() {
-		err := consumer.Close()
-		if err != nil {
-			log.Print("consumer close err: ", err)
-		}
+		_ = consumer.Close()
 	}()
 
 	for i := 0; ; i++ {
@@ -205,7 +204,7 @@ func Get(str string) (string, error) {
 	return "", fmt.Errorf("the storage is empty or the element is missing")
 }
 
-func GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
+func (s *S) GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 	var UserURLs []URLs
 	if s.File == "" {
 		for _, i := range s.URLs {
@@ -225,10 +224,7 @@ func GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 		return UserURLs, err
 	}
 	defer func() {
-		err := consumer.Close()
-		if err != nil {
-			log.Print("consumer close err: ", err)
-		}
+		_ = consumer.Close()
 	}()
 
 	for i := 0; ; i++ {
