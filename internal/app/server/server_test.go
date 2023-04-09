@@ -57,11 +57,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 func TestServer(t *testing.T) {
 	conf := config.Conf
 
-	cModel := storage.NewStorageModel(conf.FileStoragePath)
-	err := cModel.StartStorage()
-	if err != nil {
-		log.Print("start storage file path err: ", err)
-	}
+	cModel, _ := storage.NewStorageModel(conf)
 
 	c := handlers.NewController(cModel)
 

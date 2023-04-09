@@ -3,10 +3,14 @@ package storage
 import (
 	"strconv"
 	"testing"
+
+	"main/internal/app/config"
 )
 
 func TestAddAndGet(t *testing.T) {
-	c := NewStorageModel("")
+	conf := config.Conf
+
+	c, _ := NewStorageModel(conf)
 
 	for i := 0; i < 25; i++ {
 		tt := struct {

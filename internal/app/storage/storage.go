@@ -5,18 +5,25 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"main/internal/app/config"
 )
 
 type Storage interface {
 	Add(url, user string) (string, error)
 	Get(str string) (string, error)
-	GetAll(user, serverAddress, baseURL string) ([]URLs, error)
+	GetAll(user string) ([]URLs, error)
 }
 
-type S struct {
-	File string        // Путь до файла хранилища
+var s struct {
 	URLs map[int]Event // Используется, если File не прописан
 	ID   int           // Это ID последнего элемента в хранилище
+}
+
+type Config struct {
+	ServerAddress   string
+	BaseURL         string
+	FileStoragePath string
 }
 
 type Event struct {
@@ -83,18 +90,16 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func NewStorageModel(FileStoragePath string) *S {
-	return &S{File: FileStoragePath, URLs: make(map[int]Event), ID: -1}
-}
-
-func (s *S) StartStorage() error {
-	if s.File == "" {
-		return nil
+func NewStorageModel(c config.Config) (*Config, error) {
+	if c.FileStoragePath == "" {
+		s.ID = -1
+		s.URLs = make(map[int]Event)
+		return &Config{ServerAddress: c.ServerAddress, BaseURL: c.BaseURL, FileStoragePath: c.FileStoragePath}, nil
 	}
 
-	consumer, err := newConsumer(s.File)
+	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -107,7 +112,7 @@ func (s *S) StartStorage() error {
 		if readEvent == nil {
 			break
 		} else if err != nil {
-			return err
+			return nil, err
 		}
 
 		maxID = readEvent.ID
@@ -116,20 +121,20 @@ func (s *S) StartStorage() error {
 	if maxID != "-1" {
 		id, err := strconv.ParseInt(maxID, 36, 64)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		s.ID = int(id)
 	}
 
-	return nil
+	return &Config{ServerAddress: c.ServerAddress, BaseURL: c.BaseURL, FileStoragePath: c.FileStoragePath}, nil
 }
 
-func (s *S) Add(url, user string) (string, error) {
+func (c *Config) Add(url, user string) (string, error) {
 	var id string
 	s.ID++
 
-	if s.File == "" {
+	if c.FileStoragePath == "" {
 		id = strconv.FormatInt(int64(s.ID), 36)
 		s.URLs[s.ID] = Event{
 			ID:   id,
@@ -142,7 +147,7 @@ func (s *S) Add(url, user string) (string, error) {
 
 	id = strconv.FormatInt(int64(s.ID), 36)
 
-	producer, err := newProducer(s.File)
+	producer, err := newProducer(c.FileStoragePath)
 	if err != nil {
 		return "", err
 	}
@@ -162,13 +167,13 @@ func (s *S) Add(url, user string) (string, error) {
 	return id, nil
 }
 
-func (s *S) Get(str string) (string, error) {
+func (c *Config) Get(str string) (string, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
 		return "", err
 	}
 
-	if s.File == "" {
+	if c.FileStoragePath == "" {
 		if int(id) > s.ID {
 			return "", fmt.Errorf("the storage is empty or the element is missing")
 		}
@@ -180,7 +185,7 @@ func (s *S) Get(str string) (string, error) {
 		return "", fmt.Errorf("the storage is empty or the element is missing")
 	}
 
-	consumer, err := newConsumer(s.File)
+	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return "", err
 	}
@@ -204,13 +209,13 @@ func (s *S) Get(str string) (string, error) {
 	return "", fmt.Errorf("the storage is empty or the element is missing")
 }
 
-func (s *S) GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
+func (c *Config) GetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
-	if s.File == "" {
+	if c.FileStoragePath == "" {
 		for _, i := range s.URLs {
 			if i.User == user {
 				UserURLs = append(UserURLs, URLs{
-					ShortURL:    "http://" + serverAddress + baseURL + i.ID,
+					ShortURL:    "http://" + c.ServerAddress + c.BaseURL + i.ID,
 					OriginalURL: i.URL,
 				})
 			}
@@ -219,7 +224,7 @@ func (s *S) GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 		return UserURLs, nil
 	}
 
-	consumer, err := newConsumer(s.File)
+	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return UserURLs, err
 	}
@@ -237,7 +242,7 @@ func (s *S) GetAll(user, serverAddress, baseURL string) ([]URLs, error) {
 
 		if readEvent.User == user {
 			UserURLs = append(UserURLs, URLs{
-				ShortURL:    "http://" + serverAddress + baseURL + readEvent.ID,
+				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + readEvent.ID,
 				OriginalURL: readEvent.URL,
 			})
 		}
