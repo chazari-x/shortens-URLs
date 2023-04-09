@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	_ "github.com/lib/pq"
 	"main/internal/app/config"
 )
 
