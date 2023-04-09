@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
-	"main/internal/app/database"
 	"main/internal/app/storage"
 )
 
@@ -31,11 +31,11 @@ type (
 
 type Controller struct {
 	sConf   config.Config
-	db      database.DB
 	storage storage.Storage
+	db      *sql.DB
 }
 
-func NewController(c storage.Storage, s config.Config, db database.DB) *Controller {
+func NewController(c storage.Storage, s config.Config, db *sql.DB) *Controller {
 	return &Controller{storage: c, sConf: s, db: db}
 }
 
@@ -333,12 +333,12 @@ func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if c.db.DB == nil {
+	if c.db == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err := c.db.PingDB(r)
+	err := c.storage.PingDB(r)
 	if err != nil {
 		log.Print("PING: ping db err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)

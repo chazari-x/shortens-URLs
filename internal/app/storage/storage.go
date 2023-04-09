@@ -1,10 +1,14 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"main/internal/app/config"
 )
@@ -13,12 +17,15 @@ type Storage interface {
 	Add(url, user string) (string, error)
 	Get(str string) (string, error)
 	GetAll(user string) ([]URLs, error)
+	PingDB(r *http.Request) error
 }
 
 type Config struct {
 	ServerAddress   string
 	BaseURL         string
 	FileStoragePath string
+	DataBaseDSN     string
+	DB              *sql.DB
 }
 
 var s struct {
@@ -90,16 +97,65 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func StartStorage(c config.Config) (*Config, error) {
-	if c.FileStoragePath == "" {
-		s.ID = -1
-		s.URLs = make(map[int]Event)
-		return &Config{ServerAddress: c.ServerAddress, BaseURL: c.BaseURL, FileStoragePath: c.FileStoragePath}, nil
+func StartStorage(conf config.Config) (*Config, error) {
+	var c = &Config{
+		ServerAddress:   conf.ServerAddress,
+		BaseURL:         conf.BaseURL,
+		FileStoragePath: conf.FileStoragePath,
+		DataBaseDSN:     conf.DataBaseDSN,
+		DB:              nil,
 	}
 
-	consumer, err := newConsumer(c.FileStoragePath)
+	if c.DataBaseDSN != "" {
+		db, err := c.startDataBase()
+		if err != nil {
+			return nil, err
+		}
+		c.DB = db
+	} else if c.FileStoragePath != "" {
+		err := c.startFileStorage()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		s.URLs = make(map[int]Event)
+	}
+
+	s.ID = -1
+	return c, nil
+}
+
+func (c *Config) startDataBase() (*sql.DB, error) {
+	db, err := sql.Open("postgres", c.DataBaseDSN)
 	if err != nil {
 		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err = db.PingContext(ctx); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func (c *Config) PingDB(r *http.Request) error {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	if err := c.DB.PingContext(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) startFileStorage() error {
+	consumer, err := newConsumer(c.FileStoragePath)
+	if err != nil {
+		return err
 	}
 
 	defer func() {
@@ -112,7 +168,7 @@ func StartStorage(c config.Config) (*Config, error) {
 		if readEvent == nil {
 			break
 		} else if err != nil {
-			return nil, err
+			return err
 		}
 
 		maxID = readEvent.ID
@@ -121,13 +177,13 @@ func StartStorage(c config.Config) (*Config, error) {
 	if maxID != "-1" {
 		id, err := strconv.ParseInt(maxID, 36, 64)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		s.ID = int(id)
 	}
 
-	return &Config{ServerAddress: c.ServerAddress, BaseURL: c.BaseURL, FileStoragePath: c.FileStoragePath}, nil
+	return nil
 }
 
 func (c *Config) Add(url, user string) (string, error) {

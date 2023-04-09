@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
-	"main/internal/app/database"
 	"main/internal/app/handlers"
 	"main/internal/app/storage"
 )
@@ -17,20 +16,12 @@ func StartSever() error {
 		return fmt.Errorf("parse config err: %s", err)
 	}
 
-	var db database.DB
-	if conf.DataBaseDSN != "" {
-		db, err = database.StartDB(conf)
-		if err != nil {
-			return fmt.Errorf("start DB err: %s", err)
-		}
-	}
-
 	sModel, err := storage.StartStorage(conf)
 	if err != nil {
 		return fmt.Errorf("start storage file path err: %s", err)
 	}
 
-	c := handlers.NewController(sModel, conf, db)
+	c := handlers.NewController(sModel, conf, sModel.DB)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)

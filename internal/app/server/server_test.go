@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/config"
-	"main/internal/app/database"
 	"main/internal/app/handlers"
 	"main/internal/app/storage"
 )
@@ -61,20 +60,12 @@ func TestServer(t *testing.T) {
 		log.Print("parse config err: ", err)
 	}
 
-	var db database.DB
-	if conf.DataBaseDSN != "" {
-		db, err = database.StartDB(conf)
-		if err != nil {
-			log.Print("start DB err: ", err)
-		}
-	}
-
 	sModel, err := storage.StartStorage(conf)
 	if err != nil {
 		log.Print("start storage file path err: ", err)
 	}
 
-	c := handlers.NewController(sModel, conf, db)
+	c := handlers.NewController(sModel, conf, sModel.DB)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)
