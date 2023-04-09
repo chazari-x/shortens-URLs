@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/config"
+	"main/internal/app/database"
 	"main/internal/app/handlers"
 	"main/internal/app/storage"
 )
@@ -57,9 +58,21 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 func TestServer(t *testing.T) {
 	conf := config.Conf
 
-	cModel, _ := storage.NewStorageModel(conf)
+	var dModel *database.DB
+	var err error
+	if conf.DataBaseDSN != "" {
+		dModel, err = database.StartDB(conf)
+		if err != nil {
+			log.Print("start DB err: ", err)
+		}
+	}
 
-	c := handlers.NewController(cModel)
+	sModel, err := storage.NewStorageModel(conf)
+	if err != nil {
+		log.Print("start storage file path err: ", err)
+	}
+
+	c := handlers.NewController(sModel, dModel)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"main/internal/app/database"
 	"main/internal/app/storage"
 )
 
@@ -28,11 +29,12 @@ type (
 )
 
 type Controller struct {
-	config *storage.Config
+	storage *storage.Config
+	db      *database.DB
 }
 
-func NewController(c *storage.Config) *Controller {
-	return &Controller{config: c}
+func NewController(c *storage.Config, db *database.DB) *Controller {
+	return &Controller{storage: c, db: db}
 }
 
 func generateRandom(size int) ([]byte, error) {
@@ -123,7 +125,7 @@ func (c *Controller) GzipHandle(next http.Handler) http.Handler {
 func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	url, err := c.config.Get(chi.URLParam(r, "id"))
+	url, err := c.storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -188,7 +190,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := c.config.Add(string(b), uid)
+	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
 		log.Print("POST: add err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -197,7 +199,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	_, err = w.Write([]byte("http://" + c.config.ServerAddress + c.config.BaseURL + id))
+	_, err = w.Write([]byte("http://" + c.storage.ServerAddress + c.storage.BaseURL + id))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -259,7 +261,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := c.config.Add(url.URL, uid)
+	id, err := c.storage.Add(url.URL, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -271,7 +273,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	marshal, err := json.Marshal(short{
-		Result: "http://" + c.config.ServerAddress + c.config.BaseURL + id,
+		Result: "http://" + c.storage.ServerAddress + c.storage.BaseURL + id,
 	})
 	if err != nil {
 		log.Print("SHORTEN: json marshal err: ", err)
@@ -304,7 +306,7 @@ func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	URLs, err := c.config.GetAll(cookie.Value)
+	URLs, err := c.storage.GetAll(cookie.Value)
 	if err != nil {
 		log.Print("UserURLs: GetAll err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -324,4 +326,22 @@ func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+}
+
+func (c *Controller) Ping(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if c.db == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err := c.db.PingDB()
+	if err != nil {
+		log.Print("PING: ping db err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

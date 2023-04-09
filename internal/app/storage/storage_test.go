@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"log"
 	"strconv"
 	"testing"
 
@@ -10,7 +11,10 @@ import (
 func TestAddAndGet(t *testing.T) {
 	conf := config.Conf
 
-	c, _ := NewStorageModel(conf)
+	c, err := NewStorageModel(conf)
+	if err != nil {
+		log.Print(err)
+	}
 
 	for i := 0; i < 25; i++ {
 		tt := struct {
