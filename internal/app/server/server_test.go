@@ -56,23 +56,25 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 }
 
 func TestServer(t *testing.T) {
-	conf := config.Conf
+	conf, err := config.ParseConfig()
+	if err != nil {
+		log.Print("parse config err: ", err)
+	}
 
-	var dModel *database.DB
-	var err error
+	var db database.DB
 	if conf.DataBaseDSN != "" {
-		dModel, err = database.StartDB(conf)
+		db, err = database.StartDB(conf)
 		if err != nil {
 			log.Print("start DB err: ", err)
 		}
 	}
 
-	sModel, err := storage.NewStorageModel(conf)
+	sModel, err := storage.StartStorage(conf)
 	if err != nil {
 		log.Print("start storage file path err: ", err)
 	}
 
-	c := handlers.NewController(sModel, dModel)
+	c := handlers.NewController(sModel, conf, db)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)

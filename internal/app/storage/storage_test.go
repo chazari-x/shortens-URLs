@@ -11,7 +11,7 @@ import (
 func TestAddAndGet(t *testing.T) {
 	conf := config.Conf
 
-	c, err := NewStorageModel(conf)
+	c, err := StartStorage(conf)
 	if err != nil {
 		log.Print(err)
 	}

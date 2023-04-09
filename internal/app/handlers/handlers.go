@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"main/internal/app/config"
 	"main/internal/app/database"
 	"main/internal/app/storage"
 )
@@ -29,12 +30,13 @@ type (
 )
 
 type Controller struct {
-	storage *storage.Config
-	db      *database.DB
+	sConf   config.Config
+	db      database.DB
+	storage storage.Storage
 }
 
-func NewController(c *storage.Config, db *database.DB) *Controller {
-	return &Controller{storage: c, db: db}
+func NewController(c storage.Storage, s config.Config, db database.DB) *Controller {
+	return &Controller{storage: c, sConf: s, db: db}
 }
 
 func generateRandom(size int) ([]byte, error) {
@@ -199,7 +201,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	_, err = w.Write([]byte("http://" + c.storage.ServerAddress + c.storage.BaseURL + id))
+	_, err = w.Write([]byte("http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -273,7 +275,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	marshal, err := json.Marshal(short{
-		Result: "http://" + c.storage.ServerAddress + c.storage.BaseURL + id,
+		Result: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id,
 	})
 	if err != nil {
 		log.Print("SHORTEN: json marshal err: ", err)
@@ -328,15 +330,15 @@ func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *Controller) Ping(w http.ResponseWriter, _ *http.Request) {
+func (c *Controller) Ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if c.db == nil {
+	if c.db.DB == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err := c.db.PingDB()
+	err := c.db.PingDB(r)
 	if err != nil {
 		log.Print("PING: ping db err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)

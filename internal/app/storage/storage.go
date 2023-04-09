@@ -15,15 +15,15 @@ type Storage interface {
 	GetAll(user string) ([]URLs, error)
 }
 
-var s struct {
-	URLs map[int]Event // Используется, если File не прописан
-	ID   int           // Это ID последнего элемента в хранилище
-}
-
 type Config struct {
 	ServerAddress   string
 	BaseURL         string
 	FileStoragePath string
+}
+
+var s struct {
+	URLs map[int]Event // Используется, если File не прописан
+	ID   int           // Это ID последнего элемента в хранилище
 }
 
 type Event struct {
@@ -90,7 +90,7 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func NewStorageModel(c config.Config) (*Config, error) {
+func StartStorage(c config.Config) (*Config, error) {
 	if c.FileStoragePath == "" {
 		s.ID = -1
 		s.URLs = make(map[int]Event)
