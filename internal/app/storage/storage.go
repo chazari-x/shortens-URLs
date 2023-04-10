@@ -426,5 +426,9 @@ func (c *Config) dbGetAll(user string) ([]URLs, error) {
 		})
 	}
 
+	if rows.Err() != nil {
+		return nil, err
+	}
+
 	return UserURLs, nil
 }
