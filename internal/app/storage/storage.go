@@ -355,6 +355,9 @@ func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
 	}()
 
 	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL(url, userID) VALUES($1, $2) RETURNING id")
+	if err != nil {
+		return nil, err
+	}
 
 	txStmt := tx.Stmt(insertStmt)
 
