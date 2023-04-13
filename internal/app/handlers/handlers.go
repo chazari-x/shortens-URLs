@@ -29,6 +29,17 @@ type (
 	}
 )
 
+type (
+	BatchOriginal struct {
+		ID  string `json:"correlation_id"`
+		URL string `json:"original_url"`
+	}
+	BatchShort struct {
+		ID  string `json:"correlation_id"`
+		URL string `json:"short_url"`
+	}
+)
+
 type Controller struct {
 	sConf   config.Config
 	storage storage.Storage
@@ -224,7 +235,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 
 		uid, err = setUserIdentification()
 		if err != nil {
-			log.Print("POST: set user identification err: ", err)
+			log.Print("SHORTEN: set user identification err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -288,6 +299,103 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write(marshal)
 	if err != nil {
 		log.Print("SHORTEN: write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var uid string
+
+	cookie, err := r.Cookie("user_identification")
+	if err != nil {
+		if !strings.Contains(err.Error(), "named cookie not present") {
+			log.Print("r.Cookie err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		uid, err = setUserIdentification()
+		if err != nil {
+			log.Print("BATCH: set user identification err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "user_identification",
+			Value:    uid,
+			Path:     "/",
+			MaxAge:   3600,
+			HttpOnly: false,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
+		})
+	} else {
+		uid = cookie.Value
+	}
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Print("BATCH: read all err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if string(b) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var bOriginal []BatchOriginal
+
+	err = json.Unmarshal(b, &bOriginal)
+	if err != nil {
+		log.Print("BATCH: json unmarshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var urls []string
+
+	for _, i := range bOriginal {
+		urls = append(urls, i.URL)
+	}
+
+	id, err := c.storage.BatchAdd(urls, uid)
+	if err != nil {
+		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		log.Print("BATCH: add err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var bShort []BatchShort
+
+	for x, i := range id {
+		bShort = append(bShort, BatchShort{
+			ID:  bOriginal[x].ID,
+			URL: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + i,
+		})
+	}
+
+	marshal, err := json.Marshal(bShort)
+	if err != nil {
+		log.Print("BATCH: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Print("BATCH: write err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -20,6 +20,7 @@ type Storage interface {
 	Get(str string) (string, error)
 	GetAll(user string) ([]URLs, error)
 	PingDB(r *http.Request) error
+	BatchAdd(url []string, user string) ([]string, error)
 }
 
 type Config struct {
@@ -267,6 +268,109 @@ func (c *Config) dbAdd(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(id-1), 36)
 
 	return sID, nil
+}
+
+func (c *Config) BatchAdd(url []string, user string) ([]string, error) {
+	var ids []string
+	var err error
+	s.ID++
+
+	if c.DataBaseDSN != "" {
+		ids, err = c.dbBatchAdd(url, user)
+	} else if c.FileStoragePath != "" {
+		ids, err = c.fileBatchAdd(url, user)
+	} else {
+		ids, err = c.memoryBatchAdd(url, user)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
+func (c *Config) memoryBatchAdd(urls []string, user string) ([]string, error) {
+	var ids []string
+
+	for i := 0; i < len(urls); i++ {
+		id := strconv.FormatInt(int64(s.ID), 36)
+		s.URLs[s.ID] = Event{
+			ID:   id,
+			URL:  urls[i],
+			User: user,
+		}
+
+		ids = append(ids, id)
+
+		if i < len(urls)-1 {
+			s.ID++
+		}
+	}
+
+	return ids, nil
+}
+
+func (c *Config) fileBatchAdd(urls []string, user string) ([]string, error) {
+	var ids []string
+
+	producer, err := newProducer(c.FileStoragePath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = producer.Close()
+	}()
+
+	for i := 0; i < len(urls); i++ {
+		id := strconv.FormatInt(int64(s.ID), 36)
+		err = producer.WriteEvent(Event{
+			ID:   id,
+			URL:  urls[i],
+			User: user,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		ids = append(ids, id)
+
+		if i < len(urls)-1 {
+			s.ID++
+		}
+	}
+
+	return ids, nil
+}
+
+func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
+	var ids []string
+
+	tx, err := c.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL(url, userID) VALUES($1, $2) RETURNING id")
+
+	txStmt := tx.Stmt(insertStmt)
+
+	for _, u := range urls {
+		var id int
+		err = txStmt.QueryRow(u, user).Scan(&id)
+		if err != nil {
+			return nil, err
+		}
+
+		sID := strconv.FormatInt(int64(id-1), 36)
+
+		ids = append(ids, sID)
+	}
+
+	return ids, tx.Commit()
 }
 
 func (c *Config) Get(str string) (string, error) {

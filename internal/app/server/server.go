@@ -29,6 +29,7 @@ func StartSever() error {
 	r.Get("/ping", c.Ping)
 	r.Post("/", c.Post)
 	r.Post("/api/shorten", c.Shorten)
+	r.Post("/api/shorten/batch", c.Batch)
 
 	return http.ListenAndServe(conf.ServerAddress[:len(conf.ServerAddress)-1], c.GzipHandle(r))
 }
