@@ -527,8 +527,11 @@ func (c *Config) dbGetAll(user string) ([]URLs, error) {
 			}
 			return nil, err
 		}
+
+		id := strconv.FormatInt(int64(dbItem.ID), 36)
+
 		UserURLs = append(UserURLs, URLs{
-			ShortURL:    "http://" + c.ServerAddress + c.BaseURL + strconv.Itoa(dbItem.ID),
+			ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
 			OriginalURL: dbItem.URL,
 		})
 	}
