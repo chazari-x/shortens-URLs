@@ -528,7 +528,7 @@ func (c *Config) dbGetAll(user string) ([]URLs, error) {
 			return nil, err
 		}
 
-		id := strconv.FormatInt(int64(dbItem.ID), 36)
+		id := strconv.FormatInt(int64(dbItem.ID-1), 36)
 
 		UserURLs = append(UserURLs, URLs{
 			ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
