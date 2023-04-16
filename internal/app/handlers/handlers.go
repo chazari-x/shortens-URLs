@@ -203,14 +203,21 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var status = http.StatusCreated
+
 	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
-		log.Print("POST: add err: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+
+		if !strings.Contains(err.Error(), "url conflict") {
+			log.Print("POST: add err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		status = http.StatusConflict
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 
 	_, err = w.Write([]byte("http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id))
 	if err != nil {
@@ -274,16 +281,20 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var status = http.StatusCreated
+
 	id, err := c.storage.Add(url.URL, uid)
 	if err != nil {
-		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
-			w.WriteHeader(http.StatusBadRequest)
+		if !strings.Contains(err.Error(), "url conflict") {
+			log.Print("SHORTEN: add err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		log.Print("SHORTEN: add err: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+
+		status = http.StatusConflict
 	}
+
+	w.WriteHeader(status)
 
 	marshal, err := json.Marshal(short{
 		Result: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id,
@@ -293,8 +304,6 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	w.WriteHeader(http.StatusCreated)
 
 	_, err = w.Write(marshal)
 	if err != nil {

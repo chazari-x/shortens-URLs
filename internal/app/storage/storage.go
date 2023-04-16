@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -149,7 +149,7 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS shortURL (" +
 		"id SERIAL PRIMARY KEY NOT NULL, " +
-		"url varchar NOT NULL, " +
+		"url varchar UNIQUE NOT NULL, " +
 		"userID varchar NOT NULL)")
 	if err != nil {
 		return nil, err
@@ -217,10 +217,12 @@ func (c *Config) Add(url, user string) (string, error) {
 	}
 
 	if err != nil {
-		return "", err
+		if !strings.Contains(err.Error(), "url conflict") {
+			return "", err
+		}
 	}
 
-	return id, nil
+	return id, err
 }
 
 func (c *Config) memoryAdd(url, user string) (string, error) {
@@ -260,12 +262,19 @@ func (c *Config) fileAdd(url, user string) (string, error) {
 func (c *Config) dbAdd(addURL, user string) (string, error) {
 	var id int
 
-	err := c.DB.QueryRow("INSERT INTO shortURL (url, userID) VALUES ($1, $2) RETURNING id", addURL, user).Scan(&id)
+	err := c.DB.QueryRow("INSERT INTO shortURL (url, userID) VALUES ($1, $2)  "+
+		"ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id", addURL, user).Scan(&id)
 	if err != nil {
 		return "", err
 	}
 
 	sID := strconv.FormatInt(int64(id-1), 36)
+
+	if id-1 <= s.ID {
+		return sID, errors.New("url conflict")
+	}
+
+	s.ID = id - 1
 
 	return sID, nil
 }
@@ -384,7 +393,7 @@ func (c *Config) Get(str string) (string, error) {
 
 	if c.DataBaseDSN == "" {
 		if int(id) > s.ID {
-			return "", fmt.Errorf("the storage is empty or the element is missing")
+			return "", errors.New("the storage is empty or the element is missing")
 		}
 	}
 
@@ -430,7 +439,7 @@ func (c *Config) fileGet(str string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("the storage is empty or the element is missing")
+	return "", errors.New("the storage is empty or the element is missing")
 }
 
 func (c *Config) dbGet(id int) (string, error) {
@@ -439,7 +448,7 @@ func (c *Config) dbGet(id int) (string, error) {
 	err := c.DB.QueryRow("SELECT * FROM shortURL WHERE id = $1", id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows in result set") {
-			return "", fmt.Errorf("the storage is empty or the element is missing")
+			return "", errors.New("the storage is empty or the element is missing")
 		}
 		return "", err
 	}
@@ -523,7 +532,7 @@ func (c *Config) dbGetAll(user string) ([]URLs, error) {
 		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 		if err != nil {
 			if strings.Contains(err.Error(), "no rows in result set") {
-				return nil, fmt.Errorf("the storage is empty or the element is missing")
+				return nil, errors.New("the storage is empty or the element is missing")
 			}
 			return nil, err
 		}
