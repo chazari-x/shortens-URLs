@@ -115,6 +115,8 @@ func StartStorage(conf config.Config) (*Config, error) {
 		DB:              nil,
 	}
 
+	s.ID = -1
+
 	if c.DataBaseDSN != "" {
 		db, err := c.startDataBase()
 		if err != nil {
@@ -130,7 +132,6 @@ func StartStorage(conf config.Config) (*Config, error) {
 		s.URLs = make(map[int]Event)
 	}
 
-	s.ID = -1
 	return c, nil
 }
 
@@ -154,6 +155,18 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	row := db.QueryRow("SELECT MAX(id) FROM shortURL")
+	if row == nil {
+		return db, nil
+	}
+
+	err = row.Scan(&s.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.ID--
 
 	return db, nil
 }
@@ -206,13 +219,14 @@ func (c *Config) startFileStorage() error {
 func (c *Config) Add(url, user string) (string, error) {
 	var id string
 	var err error
-	s.ID++
 
 	if c.DataBaseDSN != "" {
 		id, err = c.dbAdd(url, user)
 	} else if c.FileStoragePath != "" {
+		s.ID++
 		id, err = c.fileAdd(url, user)
 	} else {
+		s.ID++
 		id, err = c.memoryAdd(url, user)
 	}
 
@@ -282,13 +296,14 @@ func (c *Config) dbAdd(addURL, user string) (string, error) {
 func (c *Config) BatchAdd(url []string, user string) ([]string, error) {
 	var ids []string
 	var err error
-	s.ID++
 
 	if c.DataBaseDSN != "" {
 		ids, err = c.dbBatchAdd(url, user)
 	} else if c.FileStoragePath != "" {
+		s.ID++
 		ids, err = c.fileBatchAdd(url, user)
 	} else {
+		s.ID++
 		ids, err = c.memoryBatchAdd(url, user)
 	}
 
@@ -363,7 +378,8 @@ func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
 		_ = tx.Rollback()
 	}()
 
-	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL(url, userID) VALUES($1, $2) RETURNING id")
+	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL (url, userID) VALUES ($1, $2)  " +
+		"ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id")
 	if err != nil {
 		return nil, err
 	}
@@ -378,6 +394,12 @@ func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
 		}
 
 		sID := strconv.FormatInt(int64(id-1), 36)
+
+		if id-1 > s.ID {
+			s.ID = id - 1
+		}
+
+		s.ID = id - 1
 
 		ids = append(ids, sID)
 	}

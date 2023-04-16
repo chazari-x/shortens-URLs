@@ -207,7 +207,6 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 
 	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
-
 		if !strings.Contains(err.Error(), "url conflict") {
 			log.Print("POST: add err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
