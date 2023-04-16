@@ -156,12 +156,7 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	row := db.QueryRow("SELECT MAX(id) FROM shortURL")
-	if row == nil {
-		return db, nil
-	}
-
-	err = row.Scan(&s.ID)
+	err = db.QueryRow("SELECT MAX(id) FROM shortURL").Scan(&s.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "converting NULL to int is unsupported") {
 			return db, nil
