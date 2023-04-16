@@ -163,6 +163,9 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 
 	err = row.Scan(&s.ID)
 	if err != nil {
+		if strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+			return db, nil
+		}
 		return nil, err
 	}
 
