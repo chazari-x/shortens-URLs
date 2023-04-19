@@ -287,7 +287,7 @@ func (c *Model) dbAdd(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(id-1), 36)
 
 	if id-1 <= s.ID {
-		return sID, errors.New("url conflict")
+		return sID, ErrURLConflict
 	}
 
 	s.ID = id - 1

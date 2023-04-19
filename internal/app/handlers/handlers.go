@@ -163,7 +163,7 @@ func cookieMiddleware(next http.Handler) http.Handler {
 
 			uid, err = setUserIdentification()
 			if err != nil {
-				log.Print("SHORTEN: set user identification err: ", err)
+				log.Print("COOKIE: set user identification err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
