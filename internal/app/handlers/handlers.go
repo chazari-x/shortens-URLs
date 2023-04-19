@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -50,6 +52,63 @@ func NewController(c storage.Storage, s config.Config, db *sql.DB) *Controller {
 	return &Controller{storage: c, sConf: s, db: db}
 }
 
+type Middleware func(http.Handler) http.Handler
+
+func MiddlewaresConveyor(h http.Handler) http.Handler {
+	middlewares := []Middleware{gzipMiddleware, cookieMiddleware}
+	for _, middleware := range middlewares {
+		h = middleware(h)
+	}
+	return h
+}
+
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				log.Print("GZIP: new reader err: ", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			defer func() {
+				_ = gz.Close()
+			}()
+
+			r.Body = gz
+		}
+
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		if err != nil {
+			log.Print("GZIP: new writer level err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		defer func() {
+			_ = gz.Close()
+		}()
+
+		w.Header().Set("Content-Encoding", "gzip")
+		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+	})
+}
+
 func generateRandom(size int) ([]byte, error) {
 	b := make([]byte, size)
 	_, err := rand.Read(b)
@@ -88,50 +147,44 @@ func setUserIdentification() (string, error) {
 	return id, nil
 }
 
-type gzipWriter struct {
-	http.ResponseWriter
-	Writer io.Writer
+type UserIdentification struct {
+	ID string
 }
 
-func (w gzipWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
-
-func (c *Controller) GzipHandle(next http.Handler) http.Handler {
+func cookieMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			gz, err := gzip.NewReader(r.Body)
-			if err != nil {
-				log.Print("GZIP: new reader err: ", err)
+		var uid string
+
+		cookie, err := r.Cookie("user_identification")
+		if err != nil {
+			if !errors.Is(err, http.ErrNoCookie) {
+				log.Print("r.Cookie err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
-			defer func() {
-				_ = gz.Close()
-			}()
+			uid, err = setUserIdentification()
+			if err != nil {
+				log.Print("SHORTEN: set user identification err: ", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 
-			r.Body = gz
+			http.SetCookie(w, &http.Cookie{
+				Name:     "user_identification",
+				Value:    uid,
+				Path:     "/",
+				MaxAge:   3600,
+				HttpOnly: false,
+				Secure:   false,
+				SameSite: http.SameSiteLaxMode,
+			})
+		} else {
+			uid = cookie.Value
 		}
 
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			log.Print("GZIP: new writer level err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		defer func() {
-			_ = gz.Close()
-		}()
-
-		w.Header().Set("Content-Encoding", "gzip")
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+		ctx := context.WithValue(r.Context(), "cookie", uid)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -161,35 +214,7 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	var uid string
-
-	cookie, err := r.Cookie("user_identification")
-	if err != nil {
-		if !strings.Contains(err.Error(), "named cookie not present") {
-			log.Print("POST: r.Cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		uid, err = setUserIdentification()
-		if err != nil {
-			log.Print("POST: set user identification err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     "user_identification",
-			Value:    uid,
-			Path:     "/",
-			MaxAge:   3600,
-			HttpOnly: false,
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
-		})
-	} else {
-		uid = cookie.Value
-	}
+	uid := r.Context().Value("cookie").(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -229,35 +254,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var uid string
-
-	cookie, err := r.Cookie("user_identification")
-	if err != nil {
-		if !strings.Contains(err.Error(), "named cookie not present") {
-			log.Print("r.Cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		uid, err = setUserIdentification()
-		if err != nil {
-			log.Print("SHORTEN: set user identification err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     "user_identification",
-			Value:    uid,
-			Path:     "/",
-			MaxAge:   3600,
-			HttpOnly: false,
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
-		})
-	} else {
-		uid = cookie.Value
-	}
+	uid := r.Context().Value("cookie").(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -315,35 +312,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var uid string
-
-	cookie, err := r.Cookie("user_identification")
-	if err != nil {
-		if !strings.Contains(err.Error(), "named cookie not present") {
-			log.Print("r.Cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		uid, err = setUserIdentification()
-		if err != nil {
-			log.Print("BATCH: set user identification err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     "user_identification",
-			Value:    uid,
-			Path:     "/",
-			MaxAge:   3600,
-			HttpOnly: false,
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
-		})
-	} else {
-		uid = cookie.Value
-	}
+	uid := r.Context().Value("cookie").(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -383,7 +352,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bShort []BatchShort
+	bShort := make([]BatchShort, len(id))
 
 	for x, i := range id {
 		bShort = append(bShort, BatchShort{
@@ -412,19 +381,9 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	cookie, err := r.Cookie("user_identification")
-	if err != nil {
-		if !strings.Contains(err.Error(), "named cookie not present") {
-			log.Print("r.Cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+	uid := r.Context().Value("cookie").(string)
 
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	URLs, err := c.storage.GetAll(cookie.Value)
+	URLs, err := c.storage.GetAll(uid)
 	if err != nil {
 		log.Print("UserURLs: GetAll err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -454,7 +413,7 @@ func (c *Controller) Ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := c.storage.PingDB(r)
+	err := c.storage.PingDB(r.Context())
 	if err != nil {
 		log.Print("PING: ping db err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)

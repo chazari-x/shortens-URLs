@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
-	"main/internal/app/handlers"
+	h "main/internal/app/handlers"
 	"main/internal/app/storage"
 )
 
@@ -21,7 +21,7 @@ func StartSever() error {
 		return fmt.Errorf("start storage file path err: %s", err)
 	}
 
-	c := handlers.NewController(sModel, conf, sModel.DB)
+	c := h.NewController(sModel, conf, sModel.DB)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)
@@ -31,5 +31,5 @@ func StartSever() error {
 	r.Post("/api/shorten", c.Shorten)
 	r.Post("/api/shorten/batch", c.Batch)
 
-	return http.ListenAndServe(conf.ServerAddress[:len(conf.ServerAddress)-1], c.GzipHandle(r))
+	return http.ListenAndServe(conf.ServerAddress[:len(conf.ServerAddress)-1], h.MiddlewaresConveyor(r))
 }

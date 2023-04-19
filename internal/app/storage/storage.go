@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -19,11 +18,11 @@ type Storage interface {
 	Add(url, user string) (string, error)
 	Get(str string) (string, error)
 	GetAll(user string) ([]URLs, error)
-	PingDB(r *http.Request) error
+	PingDB(ctx context.Context) error
 	BatchAdd(url []string, user string) ([]string, error)
 }
 
-type Config struct {
+type Model struct {
 	ServerAddress   string
 	BaseURL         string
 	FileStoragePath string
@@ -52,6 +51,11 @@ type URLs struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 }
+
+var (
+	ErrURLConflict  = errors.New("url conflict")
+	ErrStorageIsNil = errors.New("the storage is empty or the element is missing")
+)
 
 type producer struct {
 	file    *os.File
@@ -106,8 +110,8 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func StartStorage(conf config.Config) (*Config, error) {
-	var c = &Config{
+func StartStorage(conf config.Config) (*Model, error) {
+	var c = &Model{
 		ServerAddress:   conf.ServerAddress,
 		BaseURL:         conf.BaseURL,
 		FileStoragePath: conf.FileStoragePath,
@@ -135,7 +139,7 @@ func StartStorage(conf config.Config) (*Config, error) {
 	return c, nil
 }
 
-func (c *Config) startDataBase() (*sql.DB, error) {
+func (c *Model) startDataBase() (*sql.DB, error) {
 	db, err := sql.Open("postgres", c.DataBaseDSN)
 	if err != nil {
 		return nil, err
@@ -148,10 +152,10 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS shortURL (" +
-		"id SERIAL PRIMARY KEY NOT NULL, " +
-		"url varchar UNIQUE NOT NULL, " +
-		"userID varchar NOT NULL)")
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS shortURL (
+								id SERIAL PRIMARY KEY NOT NULL, 
+								url VARCHAR UNIQUE NOT NULL, 
+								userID VARCHAR NOT NULL)`)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +173,8 @@ func (c *Config) startDataBase() (*sql.DB, error) {
 	return db, nil
 }
 
-func (c *Config) PingDB(r *http.Request) error {
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+func (c *Model) PingDB(cc context.Context) error {
+	ctx, cancel := context.WithTimeout(cc, time.Second)
 	defer cancel()
 
 	if err := c.DB.PingContext(ctx); err != nil {
@@ -180,7 +184,7 @@ func (c *Config) PingDB(r *http.Request) error {
 	return nil
 }
 
-func (c *Config) startFileStorage() error {
+func (c *Model) startFileStorage() error {
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return err
@@ -214,7 +218,7 @@ func (c *Config) startFileStorage() error {
 	return nil
 }
 
-func (c *Config) Add(url, user string) (string, error) {
+func (c *Model) Add(url, user string) (string, error) {
 	var id string
 	var err error
 
@@ -229,7 +233,7 @@ func (c *Config) Add(url, user string) (string, error) {
 	}
 
 	if err != nil {
-		if !strings.Contains(err.Error(), "url conflict") {
+		if !errors.Is(err, ErrURLConflict) {
 			return "", err
 		}
 	}
@@ -237,7 +241,7 @@ func (c *Config) Add(url, user string) (string, error) {
 	return id, err
 }
 
-func (c *Config) memoryAdd(url, user string) (string, error) {
+func (c *Model) memoryAdd(url, user string) (string, error) {
 	id := strconv.FormatInt(int64(s.ID), 36)
 	s.URLs[s.ID] = Event{
 		ID:   id,
@@ -248,7 +252,7 @@ func (c *Config) memoryAdd(url, user string) (string, error) {
 	return id, nil
 }
 
-func (c *Config) fileAdd(url, user string) (string, error) {
+func (c *Model) fileAdd(url, user string) (string, error) {
 	id := strconv.FormatInt(int64(s.ID), 36)
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -271,11 +275,11 @@ func (c *Config) fileAdd(url, user string) (string, error) {
 	return id, nil
 }
 
-func (c *Config) dbAdd(addURL, user string) (string, error) {
+func (c *Model) dbAdd(addURL, user string) (string, error) {
 	var id int
 
-	err := c.DB.QueryRow("INSERT INTO shortURL (url, userID) VALUES ($1, $2)  "+
-		"ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id", addURL, user).Scan(&id)
+	err := c.DB.QueryRow(`INSERT INTO shortURL (url, userID) VALUES ($1, $2)
+									ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id`, addURL, user).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -291,7 +295,7 @@ func (c *Config) dbAdd(addURL, user string) (string, error) {
 	return sID, nil
 }
 
-func (c *Config) BatchAdd(url []string, user string) ([]string, error) {
+func (c *Model) BatchAdd(url []string, user string) ([]string, error) {
 	var ids []string
 	var err error
 
@@ -312,7 +316,7 @@ func (c *Config) BatchAdd(url []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *Config) memoryBatchAdd(urls []string, user string) ([]string, error) {
+func (c *Model) memoryBatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	for i := 0; i < len(urls); i++ {
@@ -333,7 +337,7 @@ func (c *Config) memoryBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *Config) fileBatchAdd(urls []string, user string) ([]string, error) {
+func (c *Model) fileBatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -365,7 +369,7 @@ func (c *Config) fileBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
+func (c *Model) dbBatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	tx, err := c.DB.Begin()
@@ -405,7 +409,7 @@ func (c *Config) dbBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, tx.Commit()
 }
 
-func (c *Config) Get(str string) (string, error) {
+func (c *Model) Get(str string) (string, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
 		return "", err
@@ -413,7 +417,7 @@ func (c *Config) Get(str string) (string, error) {
 
 	if c.DataBaseDSN == "" {
 		if int(id) > s.ID {
-			return "", errors.New("the storage is empty or the element is missing")
+			return "", ErrStorageIsNil
 		}
 	}
 
@@ -433,11 +437,11 @@ func (c *Config) Get(str string) (string, error) {
 	return url, nil
 }
 
-func (c *Config) memoryGet(id int) (string, error) {
+func (c *Model) memoryGet(id int) (string, error) {
 	return s.URLs[id].URL, nil
 }
 
-func (c *Config) fileGet(str string) (string, error) {
+func (c *Model) fileGet(str string) (string, error) {
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return "", err
@@ -459,16 +463,16 @@ func (c *Config) fileGet(str string) (string, error) {
 		}
 	}
 
-	return "", errors.New("the storage is empty or the element is missing")
+	return "", ErrStorageIsNil
 }
 
-func (c *Config) dbGet(id int) (string, error) {
+func (c *Model) dbGet(id int) (string, error) {
 	var dbItem shortURL
 
 	err := c.DB.QueryRow("SELECT * FROM shortURL WHERE id = $1", id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 	if err != nil {
-		if strings.Contains(err.Error(), "no rows in result set") {
-			return "", errors.New("the storage is empty or the element is missing")
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrStorageIsNil
 		}
 		return "", err
 	}
@@ -476,7 +480,7 @@ func (c *Config) dbGet(id int) (string, error) {
 	return dbItem.URL, nil
 }
 
-func (c *Config) GetAll(user string) ([]URLs, error) {
+func (c *Model) GetAll(user string) ([]URLs, error) {
 	var userURLs []URLs
 	var err error
 
@@ -495,7 +499,7 @@ func (c *Config) GetAll(user string) ([]URLs, error) {
 	return userURLs, nil
 }
 
-func (c *Config) memoryGetAll(user string) ([]URLs, error) {
+func (c *Model) memoryGetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 	for _, i := range s.URLs {
 		if i.User == user {
@@ -509,7 +513,7 @@ func (c *Config) memoryGetAll(user string) ([]URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *Config) fileGetAll(user string) ([]URLs, error) {
+func (c *Model) fileGetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
@@ -538,7 +542,7 @@ func (c *Config) fileGetAll(user string) ([]URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *Config) dbGetAll(user string) ([]URLs, error) {
+func (c *Model) dbGetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 
 	rows, err := c.DB.Query("SELECT * FROM shortURL WHERE userID = $1", user)
@@ -551,8 +555,8 @@ func (c *Config) dbGetAll(user string) ([]URLs, error) {
 		var dbItem shortURL
 		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 		if err != nil {
-			if strings.Contains(err.Error(), "no rows in result set") {
-				return nil, errors.New("the storage is empty or the element is missing")
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrStorageIsNil
 			}
 			return nil, err
 		}
