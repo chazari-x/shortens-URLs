@@ -212,7 +212,7 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	uid := r.Context().Value(userIdentification).(string)
+	uid := fmt.Sprintf("%v", r.Context().Value(userIdentification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -252,7 +252,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(userIdentification).(string)
+	uid := fmt.Sprintf("%v", r.Context().Value(userIdentification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -310,7 +310,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(userIdentification).(string)
+	uid := fmt.Sprintf("%v", r.Context().Value(userIdentification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -379,7 +379,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(userIdentification).(string)
+	uid := fmt.Sprintf("%v", r.Context().Value(userIdentification))
 
 	URLs, err := c.storage.GetAll(uid)
 	if err != nil {
