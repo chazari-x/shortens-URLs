@@ -309,7 +309,7 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 
 	sID := strconv.FormatInt(int64(id), 36)
 
-	if id <= s.ID {
+	if id < s.ID {
 		return sID, ErrURLConflict
 	}
 
