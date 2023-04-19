@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 
@@ -21,7 +22,8 @@ func StartSever() error {
 		return fmt.Errorf("start storage file path err: %s", err)
 	}
 
-	model := storage.Storage(nil)
+	var model storage.Storage
+	var db *sql.DB
 
 	if memoryModel != nil {
 		model = memoryModel
@@ -33,7 +35,7 @@ func StartSever() error {
 		return fmt.Errorf("start storage err")
 	}
 
-	c := h.NewController(model, conf, dbModel.DB)
+	c := h.NewController(model, conf, db)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)
