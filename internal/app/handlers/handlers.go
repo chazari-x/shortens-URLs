@@ -147,13 +147,13 @@ func setUserIdentification() (string, error) {
 	return id, nil
 }
 
-var UserIdentification = "user_identification"
+var userIdentification = "user_identification"
 
 func cookieMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var uid string
 
-		cookie, err := r.Cookie(UserIdentification)
+		cookie, err := r.Cookie(userIdentification)
 		if err != nil {
 			if !errors.Is(err, http.ErrNoCookie) {
 				log.Print("r.Cookie err: ", err)
@@ -169,7 +169,7 @@ func cookieMiddleware(next http.Handler) http.Handler {
 			}
 
 			http.SetCookie(w, &http.Cookie{
-				Name:     UserIdentification,
+				Name:     userIdentification,
 				Value:    uid,
 				Path:     "/",
 				MaxAge:   3600,
@@ -181,7 +181,7 @@ func cookieMiddleware(next http.Handler) http.Handler {
 			uid = cookie.Value
 		}
 
-		ctx := context.WithValue(r.Context(), UserIdentification, uid)
+		ctx := context.WithValue(r.Context(), userIdentification, uid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -212,7 +212,7 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	uid := r.Context().Value(UserIdentification).(string)
+	uid := r.Context().Value(userIdentification).(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -252,7 +252,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(UserIdentification).(string)
+	uid := r.Context().Value(userIdentification).(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -310,7 +310,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(UserIdentification).(string)
+	uid := r.Context().Value(userIdentification).(string)
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -352,11 +352,11 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 
 	bShort := make([]BatchShort, len(id))
 
-	for x, i := range id {
-		bShort = append(bShort, BatchShort{
-			ID:  bOriginal[x].ID,
-			URL: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + i,
-		})
+	for i := 0; i < len(id); i++ {
+		bShort[i] = BatchShort{
+			ID:  bOriginal[i].ID,
+			URL: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id[i],
+		}
 	}
 
 	marshal, err := json.Marshal(bShort)
@@ -379,7 +379,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := r.Context().Value(UserIdentification).(string)
+	uid := r.Context().Value(userIdentification).(string)
 
 	URLs, err := c.storage.GetAll(uid)
 	if err != nil {
