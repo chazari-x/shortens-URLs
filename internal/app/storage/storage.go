@@ -307,13 +307,13 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 		return "", err
 	}
 
-	sID := strconv.FormatInt(int64(id-1), 36)
+	sID := strconv.FormatInt(int64(id), 36)
 
-	if id-1 <= s.ID {
+	if id <= s.ID {
 		return sID, ErrURLConflict
 	}
 
-	s.ID = id - 1
+	s.ID = id
 
 	return sID, nil
 }
@@ -376,8 +376,6 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 }
 
 func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
-	s.ID++
-
 	var ids []string
 
 	tx, err := c.DB.Begin()
@@ -388,8 +386,8 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 		_ = tx.Rollback()
 	}()
 
-	insertStmt, err := c.DB.Prepare(`INSERT INTO shortURL (url, userID) VALUES ($1, $2) 
-												ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id`)
+	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL (url, userID) VALUES ($1, $2)  " +
+		"ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id")
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +401,11 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			return nil, err
 		}
 
-		sID := strconv.FormatInt(int64(id-1), 36)
+		sID := strconv.FormatInt(int64(id), 36)
+
+		if id > s.ID {
+			s.ID = id
+		}
 
 		ids = append(ids, sID)
 	}
