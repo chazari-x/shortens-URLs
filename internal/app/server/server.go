@@ -16,12 +16,24 @@ func StartSever() error {
 		return fmt.Errorf("parse config err: %s", err)
 	}
 
-	sModel, err := storage.StartStorage(conf)
+	memoryModel, fileModel, dbModel, err := storage.StartStorage(conf)
 	if err != nil {
 		return fmt.Errorf("start storage file path err: %s", err)
 	}
 
-	c := h.NewController(sModel, conf, sModel.DB)
+	model := storage.Storage(nil)
+
+	if memoryModel != nil {
+		model = memoryModel
+	} else if fileModel != nil {
+		model = fileModel
+	} else if dbModel != nil {
+		model = dbModel
+	} else {
+		return fmt.Errorf("start storage err")
+	}
+
+	c := h.NewController(model, conf, dbModel.DB)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)

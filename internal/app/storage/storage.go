@@ -14,20 +14,20 @@ import (
 	"main/internal/app/config"
 )
 
+//type Storage interface {
+//	Add(url, user string) (string, error)
+//	Get(str string) (string, error)
+//	GetAll(user string) ([]URLs, error)
+//	PingDB(ctx context.Context) error
+//	BatchAdd(url []string, user string) ([]string, error)
+//}
+
 type Storage interface {
 	Add(url, user string) (string, error)
+	BatchAdd(urls []string, user string) ([]string, error)
 	Get(str string) (string, error)
 	GetAll(user string) ([]URLs, error)
-	PingDB(ctx context.Context) error
-	BatchAdd(url []string, user string) ([]string, error)
-}
-
-type Model struct {
-	ServerAddress   string
-	BaseURL         string
-	FileStoragePath string
-	DataBaseDSN     string
-	DB              *sql.DB
+	PingDB(cc context.Context) error
 }
 
 var s struct {
@@ -110,36 +110,68 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-func StartStorage(conf config.Config) (*Model, error) {
-	var c = &Model{
-		ServerAddress:   conf.ServerAddress,
-		BaseURL:         conf.BaseURL,
-		FileStoragePath: conf.FileStoragePath,
-		DataBaseDSN:     conf.DataBaseDSN,
-		DB:              nil,
-	}
-
-	s.ID = -1
-
-	if c.DataBaseDSN != "" {
-		db, err := c.startDataBase()
-		if err != nil {
-			return nil, err
-		}
-		c.DB = db
-	} else if c.FileStoragePath != "" {
-		err := c.startFileStorage()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		s.URLs = make(map[int]Event)
-	}
-
-	return c, nil
+type InMemory struct {
+	ServerAddress string
+	BaseURL       string
 }
 
-func (c *Model) startDataBase() (*sql.DB, error) {
+type InFile struct {
+	ServerAddress   string
+	BaseURL         string
+	FileStoragePath string
+}
+
+type InDB struct {
+	ServerAddress string
+	BaseURL       string
+	DataBaseDSN   string
+	DB            *sql.DB
+}
+
+func StartStorage(conf config.Config) (*InMemory, *InFile, *InDB, error) {
+	s.ID = -1
+
+	if conf.DataBaseDSN != "" {
+		var c = &InDB{
+			ServerAddress: conf.ServerAddress,
+			BaseURL:       conf.BaseURL,
+			DataBaseDSN:   conf.DataBaseDSN,
+			DB:            nil,
+		}
+
+		db, err := c.startDataBase()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		c.DB = db
+
+		return nil, nil, c, nil
+	} else if conf.FileStoragePath != "" {
+		var c = &InFile{
+			ServerAddress:   conf.ServerAddress,
+			BaseURL:         conf.BaseURL,
+			FileStoragePath: conf.FileStoragePath,
+		}
+
+		err := c.startFileStorage()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		return nil, c, nil, nil
+	}
+
+	s.URLs = make(map[int]Event)
+
+	var c = &InMemory{
+		ServerAddress: conf.ServerAddress,
+		BaseURL:       conf.BaseURL,
+	}
+
+	return c, nil, nil, nil
+}
+
+func (c *InDB) startDataBase() (*sql.DB, error) {
 	db, err := sql.Open("postgres", c.DataBaseDSN)
 	if err != nil {
 		return nil, err
@@ -173,7 +205,15 @@ func (c *Model) startDataBase() (*sql.DB, error) {
 	return db, nil
 }
 
-func (c *Model) PingDB(cc context.Context) error {
+func (c *InMemory) PingDB(_ context.Context) error {
+	return nil
+}
+
+func (c *InFile) PingDB(_ context.Context) error {
+	return nil
+}
+
+func (c *InDB) PingDB(cc context.Context) error {
 	ctx, cancel := context.WithTimeout(cc, time.Second)
 	defer cancel()
 
@@ -184,7 +224,7 @@ func (c *Model) PingDB(cc context.Context) error {
 	return nil
 }
 
-func (c *Model) startFileStorage() error {
+func (c *InFile) startFileStorage() error {
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return err
@@ -218,30 +258,7 @@ func (c *Model) startFileStorage() error {
 	return nil
 }
 
-func (c *Model) Add(url, user string) (string, error) {
-	var id string
-	var err error
-
-	if c.DataBaseDSN != "" {
-		id, err = c.dbAdd(url, user)
-	} else if c.FileStoragePath != "" {
-		s.ID++
-		id, err = c.fileAdd(url, user)
-	} else {
-		s.ID++
-		id, err = c.memoryAdd(url, user)
-	}
-
-	if err != nil {
-		if !errors.Is(err, ErrURLConflict) {
-			return "", err
-		}
-	}
-
-	return id, err
-}
-
-func (c *Model) memoryAdd(url, user string) (string, error) {
+func (c *InMemory) Add(url, user string) (string, error) {
 	id := strconv.FormatInt(int64(s.ID), 36)
 	s.URLs[s.ID] = Event{
 		ID:   id,
@@ -252,7 +269,7 @@ func (c *Model) memoryAdd(url, user string) (string, error) {
 	return id, nil
 }
 
-func (c *Model) fileAdd(url, user string) (string, error) {
+func (c *InFile) Add(url, user string) (string, error) {
 	id := strconv.FormatInt(int64(s.ID), 36)
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -275,7 +292,7 @@ func (c *Model) fileAdd(url, user string) (string, error) {
 	return id, nil
 }
 
-func (c *Model) dbAdd(addURL, user string) (string, error) {
+func (c *InDB) Add(addURL, user string) (string, error) {
 	var id int
 
 	err := c.DB.QueryRow(`INSERT INTO shortURL (url, userID) VALUES ($1, $2)
@@ -295,28 +312,7 @@ func (c *Model) dbAdd(addURL, user string) (string, error) {
 	return sID, nil
 }
 
-func (c *Model) BatchAdd(url []string, user string) ([]string, error) {
-	var ids []string
-	var err error
-
-	if c.DataBaseDSN != "" {
-		ids, err = c.dbBatchAdd(url, user)
-	} else if c.FileStoragePath != "" {
-		s.ID++
-		ids, err = c.fileBatchAdd(url, user)
-	} else {
-		s.ID++
-		ids, err = c.memoryBatchAdd(url, user)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return ids, nil
-}
-
-func (c *Model) memoryBatchAdd(urls []string, user string) ([]string, error) {
+func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	for i := 0; i < len(urls); i++ {
@@ -337,7 +333,7 @@ func (c *Model) memoryBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *Model) fileBatchAdd(urls []string, user string) ([]string, error) {
+func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -369,7 +365,7 @@ func (c *Model) fileBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *Model) dbBatchAdd(urls []string, user string) ([]string, error) {
+func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 	var ids []string
 
 	tx, err := c.DB.Begin()
@@ -409,39 +405,29 @@ func (c *Model) dbBatchAdd(urls []string, user string) ([]string, error) {
 	return ids, tx.Commit()
 }
 
-func (c *Model) Get(str string) (string, error) {
+func (c *InMemory) Get(str string) (string, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
 		return "", err
 	}
 
-	if c.DataBaseDSN == "" {
-		if int(id) > s.ID {
-			return "", ErrStorageIsNil
-		}
+	if int(id) > s.ID {
+		return "", ErrStorageIsNil
 	}
 
-	var url string
-	if c.DataBaseDSN != "" {
-		url, err = c.dbGet(int(id) + 1)
-	} else if c.FileStoragePath != "" {
-		url, err = c.fileGet(str)
-	} else {
-		url, err = c.memoryGet(int(id))
-	}
+	return s.URLs[int(id)].URL, nil
+}
 
+func (c *InFile) Get(str string) (string, error) {
+	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
 		return "", err
 	}
 
-	return url, nil
-}
+	if int(id) > s.ID {
+		return "", ErrStorageIsNil
+	}
 
-func (c *Model) memoryGet(id int) (string, error) {
-	return s.URLs[id].URL, nil
-}
-
-func (c *Model) fileGet(str string) (string, error) {
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return "", err
@@ -466,10 +452,19 @@ func (c *Model) fileGet(str string) (string, error) {
 	return "", ErrStorageIsNil
 }
 
-func (c *Model) dbGet(id int) (string, error) {
+func (c *InDB) Get(str string) (string, error) {
+	id, err := strconv.ParseInt(str, 36, 64)
+	if err != nil {
+		return "", err
+	}
+
+	if int(id) > s.ID {
+		return "", ErrStorageIsNil
+	}
+
 	var dbItem shortURL
 
-	err := c.DB.QueryRow("SELECT * FROM shortURL WHERE id = $1", id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
+	err = c.DB.QueryRow("SELECT * FROM shortURL WHERE id = $1", id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrStorageIsNil
@@ -480,26 +475,7 @@ func (c *Model) dbGet(id int) (string, error) {
 	return dbItem.URL, nil
 }
 
-func (c *Model) GetAll(user string) ([]URLs, error) {
-	var userURLs []URLs
-	var err error
-
-	if c.DataBaseDSN != "" {
-		userURLs, err = c.dbGetAll(user)
-	} else if c.FileStoragePath != "" {
-		userURLs, err = c.fileGetAll(user)
-	} else {
-		userURLs, err = c.memoryGetAll(user)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return userURLs, nil
-}
-
-func (c *Model) memoryGetAll(user string) ([]URLs, error) {
+func (c *InMemory) GetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 	for _, i := range s.URLs {
 		if i.User == user {
@@ -513,7 +489,7 @@ func (c *Model) memoryGetAll(user string) ([]URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *Model) fileGetAll(user string) ([]URLs, error) {
+func (c *InFile) GetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
@@ -542,7 +518,7 @@ func (c *Model) fileGetAll(user string) ([]URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *Model) dbGetAll(user string) ([]URLs, error) {
+func (c *InDB) GetAll(user string) ([]URLs, error) {
 	var UserURLs []URLs
 
 	rows, err := c.DB.Query("SELECT * FROM shortURL WHERE userID = $1", user)
