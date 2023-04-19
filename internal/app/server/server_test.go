@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log"
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/config"
-	"main/internal/app/handlers"
+	h "main/internal/app/handlers"
 	"main/internal/app/storage"
 )
 
@@ -60,19 +61,33 @@ func TestServer(t *testing.T) {
 		log.Print("parse config err: ", err)
 	}
 
-	sModel, err := storage.StartStorage(conf)
+	memoryModel, fileModel, dbModel, err := storage.StartStorage(conf)
 	if err != nil {
-		log.Print("start storage file path err: ", err)
+		log.Print(err)
 	}
 
-	c := handlers.NewController(sModel, conf, sModel.DB)
+	var model storage.Storage
+	var db *sql.DB
+
+	if memoryModel != nil {
+		model = memoryModel
+	} else if fileModel != nil {
+		model = fileModel
+	} else if dbModel != nil {
+		model = dbModel
+		db = dbModel.DB
+	} else {
+		log.Print(err)
+	}
+
+	c := h.NewController(model, conf, db)
 
 	r := chi.NewRouter()
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)
 	r.Get("/api/user/urls", c.UserURLs)
 	r.Post("/", c.Post)
 	r.Post("/api/shorten", c.Shorten)
-	ts := httptest.NewServer(handlers.MiddlewaresConveyor(r))
+	ts := httptest.NewServer(h.MiddlewaresConveyor(r))
 	defer ts.Close()
 
 	var urls = []string{"https://m.vk.com/login?slogin_h=9c4b5dff2b9d2ec030.187f50f7956785726a&role=fast&to=ZmVlZA--",

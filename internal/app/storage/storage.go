@@ -259,6 +259,8 @@ func (c *InFile) startFileStorage() error {
 }
 
 func (c *InMemory) Add(url, user string) (string, error) {
+	s.ID++
+
 	id := strconv.FormatInt(int64(s.ID), 36)
 	s.URLs[s.ID] = Event{
 		ID:   id,
@@ -270,6 +272,8 @@ func (c *InMemory) Add(url, user string) (string, error) {
 }
 
 func (c *InFile) Add(url, user string) (string, error) {
+	s.ID++
+
 	id := strconv.FormatInt(int64(s.ID), 36)
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -293,6 +297,8 @@ func (c *InFile) Add(url, user string) (string, error) {
 }
 
 func (c *InDB) Add(addURL, user string) (string, error) {
+	s.ID++
+
 	var id int
 
 	err := c.DB.QueryRow(`INSERT INTO shortURL (url, userID) VALUES ($1, $2)
@@ -313,6 +319,8 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 }
 
 func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
+	s.ID++
+
 	var ids []string
 
 	for i := 0; i < len(urls); i++ {
@@ -334,6 +342,8 @@ func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
 }
 
 func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
+	s.ID++
+
 	var ids []string
 
 	producer, err := newProducer(c.FileStoragePath)
@@ -366,6 +376,8 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 }
 
 func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
+	s.ID++
+
 	var ids []string
 
 	tx, err := c.DB.Begin()
