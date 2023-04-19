@@ -31,6 +31,7 @@ func StartSever() error {
 		model = fileModel
 	} else if dbModel != nil {
 		model = dbModel
+		db = dbModel.DB
 	} else {
 		return fmt.Errorf("start storage err")
 	}
