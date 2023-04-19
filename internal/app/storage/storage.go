@@ -388,8 +388,8 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 		_ = tx.Rollback()
 	}()
 
-	insertStmt, err := c.DB.Prepare("INSERT INTO shortURL (url, userID) VALUES ($1, $2)  " +
-		"ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id")
+	insertStmt, err := c.DB.Prepare(`INSERT INTO shortURL (url, userID) VALUES ($1, $2) 
+												ON CONFLICT(url) DO UPDATE SET url = $1 RETURNING id`)
 	if err != nil {
 		return nil, err
 	}
@@ -404,12 +404,6 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 		}
 
 		sID := strconv.FormatInt(int64(id-1), 36)
-
-		if id-1 > s.ID {
-			s.ID = id - 1
-		}
-
-		s.ID = id - 1
 
 		ids = append(ids, sID)
 	}
