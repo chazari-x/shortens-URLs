@@ -72,7 +72,7 @@ func TestServer(t *testing.T) {
 	r.Get("/api/user/urls", c.UserURLs)
 	r.Post("/", c.Post)
 	r.Post("/api/shorten", c.Shorten)
-	ts := httptest.NewServer(r)
+	ts := httptest.NewServer(handlers.MiddlewaresConveyor(r))
 	defer ts.Close()
 
 	var urls = []string{"https://m.vk.com/login?slogin_h=9c4b5dff2b9d2ec030.187f50f7956785726a&role=fast&to=ZmVlZA--",
