@@ -50,13 +50,13 @@ func (c *InDB) StartDataBase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	row := db.QueryRow(selectMaxID)
-	if row == nil {
-		return db, nil
-	}
+	err = db.QueryRow(selectMaxID).Scan(&mod.S.ID)
 
-	err = row.Scan(&mod.S.ID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db, nil
+		}
+
 		return nil, err
 	}
 
