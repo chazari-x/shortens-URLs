@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	mod "main/internal/app/storage/model"
@@ -84,7 +83,7 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 
 	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&id)
 	if err != nil {
-		if !strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return "", err
 		}
 
@@ -127,7 +126,7 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 		var id int
 		err = txStmt.QueryRow(u, user).Scan(&id)
 		if err != nil {
-			if !strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+			if !errors.Is(err, sql.ErrNoRows) {
 				return nil, err
 			}
 
