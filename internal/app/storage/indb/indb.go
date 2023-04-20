@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	mod "main/internal/app/storage/model"
@@ -53,7 +54,7 @@ func (c *InDB) StartDataBase() (*sql.DB, error) {
 	err = db.QueryRow(selectMaxID).Scan(&mod.S.ID)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if strings.Contains(err.Error(), "converting NULL to int is unsupported") {
 			return db, nil
 		}
 
