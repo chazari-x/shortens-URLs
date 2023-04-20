@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	mod "main/internal/app/storage/model"
@@ -81,14 +82,16 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 
 	var id int
 
-	row := c.DB.QueryRow(insertOnConflict, addURL, user)
-	if row == nil {
-		row = c.DB.QueryRow(selectIDWhereURL, addURL)
-	}
-
-	err := row.Scan(&id)
+	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&id)
 	if err != nil {
-		return "", err
+		if !strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+			return "", err
+		}
+
+		err = c.DB.QueryRow(selectIDWhereURL, addURL).Scan(&id)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	sID := strconv.FormatInt(int64(id), 36)
@@ -124,7 +127,14 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 		var id int
 		err = txStmt.QueryRow(u, user).Scan(&id)
 		if err != nil {
-			return nil, err
+			if !strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+				return nil, err
+			}
+
+			err = c.DB.QueryRow(selectIDWhereURL, u).Scan(&id)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		sID := strconv.FormatInt(int64(id), 36)
