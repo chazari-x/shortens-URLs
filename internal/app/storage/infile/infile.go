@@ -7,7 +7,7 @@ import (
 	"os"
 	"strconv"
 
-	. "main/internal/app/storage/model"
+	mod "main/internal/app/storage/model"
 )
 
 type InFile struct {
@@ -32,7 +32,7 @@ func newProducer(fileName string) (*producer, error) {
 	}, nil
 }
 
-func (p *producer) WriteEvent(event Event) error {
+func (p *producer) WriteEvent(event mod.Event) error {
 	return p.encoder.Encode(&event)
 }
 
@@ -57,8 +57,8 @@ func newConsumer(fileName string) (*Consumer, error) {
 	}, nil
 }
 
-func (c *Consumer) ReadEvent() (*Event, error) {
-	event := &Event{}
+func (c *Consumer) ReadEvent() (*mod.Event, error) {
+	event := &mod.Event{}
 	if err := c.decoder.Decode(&event); err != nil {
 		return nil, err
 	}
@@ -101,16 +101,16 @@ func (c *InFile) StartFileStorage() error {
 			return err
 		}
 
-		S.ID = int(id)
+		mod.S.ID = int(id)
 	}
 
 	return nil
 }
 
 func (c *InFile) Add(url, user string) (string, error) {
-	S.ID++
+	mod.S.ID++
 
-	id := strconv.FormatInt(int64(S.ID), 36)
+	id := strconv.FormatInt(int64(mod.S.ID), 36)
 
 	producer, err := newProducer(c.FileStoragePath)
 	if err != nil {
@@ -120,7 +120,7 @@ func (c *InFile) Add(url, user string) (string, error) {
 		_ = producer.Close()
 	}()
 
-	err = producer.WriteEvent(Event{
+	err = producer.WriteEvent(mod.Event{
 		ID:   id,
 		URL:  url,
 		User: user,
@@ -133,7 +133,7 @@ func (c *InFile) Add(url, user string) (string, error) {
 }
 
 func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
-	S.ID++
+	mod.S.ID++
 
 	var ids []string
 
@@ -146,8 +146,8 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 	}()
 
 	for i := 0; i < len(urls); i++ {
-		id := strconv.FormatInt(int64(S.ID), 36)
-		err = producer.WriteEvent(Event{
+		id := strconv.FormatInt(int64(mod.S.ID), 36)
+		err = producer.WriteEvent(mod.Event{
 			ID:   id,
 			URL:  urls[i],
 			User: user,
@@ -159,7 +159,7 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 		ids = append(ids, id)
 
 		if i < len(urls)-1 {
-			S.ID++
+			mod.S.ID++
 		}
 	}
 
@@ -172,8 +172,8 @@ func (c *InFile) Get(str string) (string, error) {
 		return "", err
 	}
 
-	if int(id) > S.ID {
-		return "", ErrStorageIsNil
+	if int(id) > mod.S.ID {
+		return "", mod.ErrStorageIsNil
 	}
 
 	consumer, err := newConsumer(c.FileStoragePath)
@@ -197,11 +197,11 @@ func (c *InFile) Get(str string) (string, error) {
 		}
 	}
 
-	return "", ErrStorageIsNil
+	return "", mod.ErrStorageIsNil
 }
 
-func (c *InFile) GetAll(user string) ([]URLs, error) {
-	var UserURLs []URLs
+func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
+	var UserURLs []mod.URLs
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
 		return UserURLs, err
@@ -219,7 +219,7 @@ func (c *InFile) GetAll(user string) ([]URLs, error) {
 		}
 
 		if readEvent.User == user {
-			UserURLs = append(UserURLs, URLs{
+			UserURLs = append(UserURLs, mod.URLs{
 				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + readEvent.ID,
 				OriginalURL: readEvent.URL,
 			})

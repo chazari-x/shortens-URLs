@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	. "main/internal/app/storage/model"
+	mod "main/internal/app/storage/model"
 )
 
 type InDB struct {
@@ -39,7 +39,7 @@ func (c *InDB) StartDataBase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	err = db.QueryRow("SELECT MAX(id) FROM shortURL").Scan(&S.ID)
+	err = db.QueryRow("SELECT MAX(id) FROM shortURL").Scan(&mod.S.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "converting NULL to int is unsupported") {
 			return db, nil
@@ -47,7 +47,7 @@ func (c *InDB) StartDataBase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	S.ID--
+	mod.S.ID--
 
 	return db, nil
 }
@@ -64,7 +64,7 @@ func (c *InDB) PingDB(cc context.Context) error {
 }
 
 func (c *InDB) Add(addURL, user string) (string, error) {
-	S.ID++
+	mod.S.ID++
 
 	var id int
 
@@ -76,11 +76,11 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 
 	sID := strconv.FormatInt(int64(id), 36)
 
-	if id < S.ID {
-		return sID, ErrURLConflict
+	if id < mod.S.ID {
+		return sID, mod.ErrURLConflict
 	}
 
-	S.ID = id
+	mod.S.ID = id
 
 	return sID, nil
 }
@@ -113,8 +113,8 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 
 		sID := strconv.FormatInt(int64(id), 36)
 
-		if id > S.ID {
-			S.ID = id
+		if id > mod.S.ID {
+			mod.S.ID = id
 		}
 
 		ids = append(ids, sID)
@@ -129,16 +129,16 @@ func (c *InDB) Get(str string) (string, error) {
 		return "", err
 	}
 
-	if int(id) > S.ID {
-		return "", ErrStorageIsNil
+	if int(id) > mod.S.ID {
+		return "", mod.ErrStorageIsNil
 	}
 
-	var dbItem ShortURL
+	var dbItem mod.ShortURL
 
 	err = c.DB.QueryRow(`SELECT * FROM shortURL WHERE id = $1`, id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrStorageIsNil
+			return "", mod.ErrStorageIsNil
 		}
 		return "", err
 	}
@@ -146,8 +146,8 @@ func (c *InDB) Get(str string) (string, error) {
 	return dbItem.URL, nil
 }
 
-func (c *InDB) GetAll(user string) ([]URLs, error) {
-	var UserURLs []URLs
+func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
+	var UserURLs []mod.URLs
 
 	rows, err := c.DB.Query(`SELECT * FROM shortURL WHERE userID = $1`, user)
 	if err != nil {
@@ -156,18 +156,18 @@ func (c *InDB) GetAll(user string) ([]URLs, error) {
 	}
 
 	for rows.Next() {
-		var dbItem ShortURL
+		var dbItem mod.ShortURL
 		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, ErrStorageIsNil
+				return nil, mod.ErrStorageIsNil
 			}
 			return nil, err
 		}
 
 		id := strconv.FormatInt(int64(dbItem.ID-1), 36)
 
-		UserURLs = append(UserURLs, URLs{
+		UserURLs = append(UserURLs, mod.URLs{
 			ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
 			OriginalURL: dbItem.URL,
 		})

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strconv"
 
-	. "main/internal/app/storage/model"
+	mod "main/internal/app/storage/model"
 )
 
 type InMemory struct {
@@ -18,10 +18,10 @@ func (c *InMemory) PingDB(_ context.Context) error {
 }
 
 func (c *InMemory) Add(url, user string) (string, error) {
-	S.ID++
+	mod.S.ID++
 
-	id := strconv.FormatInt(int64(S.ID), 36)
-	S.URLs[S.ID] = Event{
+	id := strconv.FormatInt(int64(mod.S.ID), 36)
+	mod.S.URLs[mod.S.ID] = mod.Event{
 		ID:   id,
 		URL:  url,
 		User: user,
@@ -31,13 +31,13 @@ func (c *InMemory) Add(url, user string) (string, error) {
 }
 
 func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
-	S.ID++
+	mod.S.ID++
 
 	var ids []string
 
 	for i := 0; i < len(urls); i++ {
-		id := strconv.FormatInt(int64(S.ID), 36)
-		S.URLs[S.ID] = Event{
+		id := strconv.FormatInt(int64(mod.S.ID), 36)
+		mod.S.URLs[mod.S.ID] = mod.Event{
 			ID:   id,
 			URL:  urls[i],
 			User: user,
@@ -46,7 +46,7 @@ func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
 		ids = append(ids, id)
 
 		if i < len(urls)-1 {
-			S.ID++
+			mod.S.ID++
 		}
 	}
 
@@ -59,18 +59,18 @@ func (c *InMemory) Get(str string) (string, error) {
 		return "", err
 	}
 
-	if int(id) > S.ID {
-		return "", ErrStorageIsNil
+	if int(id) > mod.S.ID {
+		return "", mod.ErrStorageIsNil
 	}
 
-	return S.URLs[int(id)].URL, nil
+	return mod.S.URLs[int(id)].URL, nil
 }
 
-func (c *InMemory) GetAll(user string) ([]URLs, error) {
-	var UserURLs []URLs
-	for _, i := range S.URLs {
+func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
+	var UserURLs []mod.URLs
+	for _, i := range mod.S.URLs {
 		if i.User == user {
-			UserURLs = append(UserURLs, URLs{
+			UserURLs = append(UserURLs, mod.URLs{
 				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + i.ID,
 				OriginalURL: i.URL,
 			})
