@@ -2,11 +2,19 @@ package handlers
 
 import (
 	"compress/gzip"
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"main/internal/app/config"
@@ -18,10 +26,41 @@ type (
 		Result string `json:"result"`
 	}
 
-	some struct {
+	original struct {
 		URL string `json:"url"`
 	}
 )
+
+type (
+	BatchOriginal struct {
+		ID  string `json:"correlation_id"`
+		URL string `json:"original_url"`
+	}
+	BatchShort struct {
+		ID  string `json:"correlation_id"`
+		URL string `json:"short_url"`
+	}
+)
+
+type Controller struct {
+	sConf   config.Config
+	storage storage.Storage
+	db      *sql.DB
+}
+
+func NewController(c storage.Storage, s config.Config, db *sql.DB) *Controller {
+	return &Controller{storage: c, sConf: s, db: db}
+}
+
+type Middleware func(http.Handler) http.Handler
+
+func MiddlewaresConveyor(h http.Handler) http.Handler {
+	middlewares := []Middleware{gzipMiddleware, cookieMiddleware}
+	for _, middleware := range middlewares {
+		h = middleware(h)
+	}
+	return h
+}
 
 type gzipWriter struct {
 	http.ResponseWriter
@@ -32,22 +71,19 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func GzipHandle(next http.Handler) http.Handler {
+func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Content-Encoding") == "gzip" {
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
-				log.Print("GZIP: new reader err:", err)
+				log.Print("GZIP: new reader err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
-			defer func(gz *gzip.Reader) {
-				err := gz.Close()
-				if err != nil {
-					log.Print("GZIP: defer func reader err:", err)
-				}
-			}(gz)
+			defer func() {
+				_ = gz.Close()
+			}()
 
 			r.Body = gz
 		}
@@ -59,27 +95,105 @@ func GzipHandle(next http.Handler) http.Handler {
 
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			log.Print("GZIP: new writer level err:", err)
+			log.Print("GZIP: new writer level err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		defer func(gz *gzip.Writer) {
-			err := gz.Close()
-			if err != nil {
-				log.Print("GZIP: defer writer err:", err)
-			}
-		}(gz)
+		defer func() {
+			_ = gz.Close()
+		}()
 
 		w.Header().Set("Content-Encoding", "gzip")
 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
 	})
 }
 
-func Get(w http.ResponseWriter, r *http.Request) {
+func generateRandom(size int) ([]byte, error) {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func makeUserIdentification() (string, error) {
+	str := time.Now().Format("02012006150405")
+
+	key, err := generateRandom(aes.BlockSize)
+	if err != nil {
+		return "", err
+	}
+
+	aesblock, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	aesgcm, err := cipher.NewGCM(aesblock)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := generateRandom(aesgcm.NonceSize())
+	if err != nil {
+		return "", err
+	}
+
+	id := fmt.Sprintf("%x", aesgcm.Seal(nil, nonce, []byte(str), nil))
+
+	return id, nil
+}
+
+var userIdentification = "user_identification"
+
+var identification struct {
+	ID string
+}
+
+func cookieMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var uid string
+
+		cookie, err := r.Cookie(userIdentification)
+		if err != nil {
+			if !errors.Is(err, http.ErrNoCookie) {
+				log.Print("r.Cookie err: ", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			uid, err = makeUserIdentification()
+			if err != nil {
+				log.Print("COOKIE: set user identification err: ", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			http.SetCookie(w, &http.Cookie{
+				Name:     userIdentification,
+				Value:    uid,
+				Path:     "/",
+				MaxAge:   3600,
+				HttpOnly: false,
+				Secure:   false,
+				SameSite: http.SameSiteLaxMode,
+			})
+		} else {
+			uid = cookie.Value
+		}
+
+		ctx := context.WithValue(r.Context(), identification, uid)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	url, err := storage.Get(chi.URLParam(r, "id"))
+	url, err := c.storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -99,12 +213,14 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func Post(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+	uid := fmt.Sprintf("%v", r.Context().Value(identification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("POST: read all err:", err)
+		log.Print("POST: read all err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -114,22 +230,22 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := storage.Add(string(b))
+	var status = http.StatusCreated
+
+	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
-		log.Print("POST: add err:", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		if !strings.Contains(err.Error(), "url conflict") {
+			log.Print("POST: add err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		status = http.StatusConflict
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 
-	c := config.Conf
-
-	if c.BaseURL != "" {
-		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id))
-	} else {
-		_, err = w.Write([]byte("http://" + c.ServerAddress + "/" + id))
-	}
+	_, err = w.Write([]byte("http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id))
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -137,12 +253,14 @@ func Post(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Shorten(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	uid := fmt.Sprintf("%v", r.Context().Value(identification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("SHORTEN: read all err:", err)
+		log.Print("SHORTEN: read all err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -152,40 +270,102 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := some{}
+	url := original{}
 
 	err = json.Unmarshal(b, &url)
 	if err != nil {
-		log.Print("SHORTEN: json unmarshal err:", err)
+		log.Print("SHORTEN: json unmarshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	id, err := storage.Add(url.URL)
+	var status = http.StatusCreated
+
+	id, err := c.storage.Add(url.URL, uid)
+	if err != nil {
+		if !strings.Contains(err.Error(), "url conflict") {
+			log.Print("SHORTEN: add err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		status = http.StatusConflict
+	}
+
+	w.WriteHeader(status)
+
+	marshal, err := json.Marshal(short{
+		Result: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id,
+	})
+	if err != nil {
+		log.Print("SHORTEN: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Print("SHORTEN: write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	uid := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Print("BATCH: read all err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if string(b) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var bOriginal []BatchOriginal
+
+	err = json.Unmarshal(b, &bOriginal)
+	if err != nil {
+		log.Print("BATCH: json unmarshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var urls []string
+
+	for _, i := range bOriginal {
+		urls = append(urls, i.URL)
+	}
+
+	id, err := c.storage.BatchAdd(urls, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Print("SHORTEN: add err:", err)
+		log.Print("BATCH: add err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	c := config.Conf
+	bShort := make([]BatchShort, len(id))
 
-	var marshal []byte
-	if c.BaseURL != "" {
-		marshal, err = json.Marshal(short{
-			Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + id,
-		})
-	} else {
-		marshal, err = json.Marshal(short{
-			Result: "http://" + c.ServerAddress + "/" + id,
-		})
+	for i := 0; i < len(id); i++ {
+		bShort[i] = BatchShort{
+			ID:  bOriginal[i].ID,
+			URL: "http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id[i],
+		}
 	}
+
+	marshal, err := json.Marshal(bShort)
 	if err != nil {
-		log.Print("SHORTEN: json marshal err:", err)
+		log.Print("BATCH: json marshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -194,8 +374,58 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 
 	_, err = w.Write(marshal)
 	if err != nil {
-		log.Print("SHORTEN: write err:", err)
+		log.Print("BATCH: write err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+}
+
+func (c *Controller) UserURLs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	uid := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	URLs, err := c.storage.GetAll(uid)
+	if err != nil {
+		log.Print("UserURLs: GetAll err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if len(URLs) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	b, err := json.Marshal(URLs)
+	if err != nil {
+		log.Print("UserURLs: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(b)
+	if err != nil {
+		log.Print("UserURLs: write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (c *Controller) Ping(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if c.db == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err := c.storage.PingDB(r.Context())
+	if err != nil {
+		log.Print("PING: ping db err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

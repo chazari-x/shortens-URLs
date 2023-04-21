@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log"
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"main/internal/app/config"
-	"main/internal/app/handlers"
+	h "main/internal/app/handlers"
 	"main/internal/app/storage"
 )
 
@@ -23,7 +24,7 @@ type (
 		Result string `json:"result"`
 	}
 
-	some struct {
+	original struct {
 		URL string `json:"url"`
 	}
 )
@@ -42,7 +43,9 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 
 	respHeader := resp.Request.URL
 
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	switch method {
 	case "GET":
@@ -53,64 +56,62 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, body string) (
 }
 
 func TestServer(t *testing.T) {
-	c := config.Conf
-
-	if c.FileStoragePath != "" {
-		err := storage.StartStorage(c.FileStoragePath)
-		if err != nil {
-			log.Print(err)
-		}
+	conf, err := config.ParseConfig()
+	if err != nil {
+		log.Print("parse config err: ", err)
 	}
+
+	memoryModel, fileModel, dbModel, err := storage.StartStorage(conf)
+	if err != nil {
+		log.Print(err)
+	}
+
+	var model storage.Storage
+	var db *sql.DB
+
+	if memoryModel != nil {
+		model = memoryModel
+	} else if fileModel != nil {
+		model = fileModel
+	} else if dbModel != nil {
+		model = dbModel
+		db = dbModel.DB
+	} else {
+		log.Print(err)
+	}
+
+	c := h.NewController(model, conf, db)
 
 	r := chi.NewRouter()
-
-	if c.BaseURL != "" {
-		r.Get("/"+c.BaseURL+"/{id}", handlers.Get)
-	} else {
-		r.Get("/{id}", handlers.Get)
-	}
-	r.Post("/", handlers.Post)
-	r.Post("/api/shorten", handlers.Shorten)
-	ts := httptest.NewServer(r)
+	r.Get("/"+conf.BaseURL+"{id}", c.Get)
+	r.Get("/api/user/urls", c.UserURLs)
+	r.Post("/", c.Post)
+	r.Post("/api/shorten", c.Shorten)
+	ts := httptest.NewServer(h.MiddlewaresConveyor(r))
 	defer ts.Close()
 
-	var urls = []string{"https://pkg.go.dev/net/http@go1.17.2",
-		"https://pkg.go.dev/net/http@go1.17.2",
-		"https://github.com/chazari-x/shortens-URLs/pull/2",
-		"https://github.com/golang-standards/project-layout/blob/master/README_ru.md",
+	var urls = []string{"https://m.vk.com/login?slogin_h=9c4b5dff2b9d2ec030.187f50f7956785726a&role=fast&to=ZmVlZA--",
+		"https://ok.ru/dk?st.cmd=anonymMain",
+		"https://www.google.ru/",
+		"https://github.com/chazari-x/shortens-URLs/actions/runs/4631562598/jobs/8194566021?pr=9",
 	}
 
 	var n = 0
 	for i := 0; i < 25; i += 2 {
-		var expectedOne string
-		var expectedTwo string
-		var pathOne string
-		var pathTwo string
-		if c.BaseURL != "" {
-			expectedOne = "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
-			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)})
-			expectedTwo = string(marshal)
-			if err != nil {
-				log.Fatal(err)
-			}
-			pathOne = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i), 36)
-			pathTwo = "/" + c.BaseURL + "/" + strconv.FormatInt(int64(i+1), 36)
-		} else {
-			expectedOne = "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i), 36)
-			marshal, err := json.Marshal(short{Result: "http://" + c.ServerAddress + "/" + strconv.FormatInt(int64(i+1), 36)})
-			expectedTwo = string(marshal)
-			if err != nil {
-				log.Fatal(err)
-			}
-			pathOne = "/" + strconv.FormatInt(int64(i), 36)
-			pathTwo = "/" + strconv.FormatInt(int64(i+1), 36)
+		expectedOne := "http://" + conf.ServerAddress + conf.BaseURL + strconv.FormatInt(int64(i), 36)
+		marshal, err := json.Marshal(short{Result: "http://" + conf.ServerAddress + conf.BaseURL + strconv.FormatInt(int64(i+1), 36)})
+		expectedTwo := string(marshal)
+		if err != nil {
+			log.Fatal(err)
 		}
+		pathOne := "/" + conf.BaseURL + strconv.FormatInt(int64(i), 36)
+		pathTwo := "/" + conf.BaseURL + strconv.FormatInt(int64(i+1), 36)
 
 		statusCode, actual := testRequest(t, ts, "POST", "/", urls[n])
 		assert.Equal(t, http.StatusCreated, statusCode)
 		assert.Equal(t, expectedOne, actual)
 
-		url, err := json.Marshal(some{URL: urls[n]})
+		url, err := json.Marshal(original{URL: urls[n]})
 		if err != nil {
 			log.Fatal(err)
 		}

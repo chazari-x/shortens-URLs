@@ -6,33 +6,37 @@ import (
 	"github.com/caarlos0/env/v6"
 )
 
+var Conf Config
+
 type Config struct {
 	ServerAddress   string `env:"SERVER_ADDRESS"`
 	BaseURL         string `env:"BASE_URL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	DataBaseDSN     string `end:"DATABASE_DSN"`
 }
 
-var Conf Config
+var f flagConfig
 
-type Flag struct {
+type flagConfig struct {
 	ServerAddress   *string
 	BaseURL         *string
 	FileStoragePath *string
+	DataBaseDSN     *string
 }
 
-var F Flag
-
 func init() {
-	F.ServerAddress = flag.String("a", "localhost:8080", "server address")
-	F.BaseURL = flag.String("b", "sh", "base url")
-	F.FileStoragePath = flag.String("f", "internal/app/storage/storage.txt", "file storage path")
+	f.ServerAddress = flag.String("a", "localhost:8080", "server address")
+	f.BaseURL = flag.String("b", "", "base url")
+	f.FileStoragePath = flag.String("f", "", "file storage path")
+	f.DataBaseDSN = flag.String("d", "", "database address")
 }
 
 func ParseConfig() (Config, error) {
 	flag.Parse()
-	Conf.ServerAddress = *F.ServerAddress
-	Conf.FileStoragePath = *F.FileStoragePath
-	Conf.BaseURL = *F.BaseURL
+	Conf.ServerAddress = *f.ServerAddress
+	Conf.FileStoragePath = *f.FileStoragePath
+	Conf.BaseURL = *f.BaseURL
+	Conf.DataBaseDSN = *f.DataBaseDSN
 
 	err := env.Parse(&Conf)
 	if err != nil {
@@ -41,6 +45,14 @@ func ParseConfig() (Config, error) {
 
 	if Conf.ServerAddress == "" {
 		Conf.ServerAddress = "localhost:8080"
+	}
+
+	if Conf.ServerAddress != "" {
+		Conf.ServerAddress += "/"
+	}
+
+	if Conf.BaseURL != "" {
+		Conf.BaseURL += "/"
 	}
 
 	return Conf, nil

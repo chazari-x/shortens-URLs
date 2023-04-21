@@ -23,4 +23,4 @@ vendor/
 .vscode
 
 *storage.txt
-shortenertest-darwin-amd64
+*rollback.go

@@ -1,178 +1,63 @@
 package storage
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"strconv"
+	"context"
+
+	_ "github.com/lib/pq"
+	"main/internal/app/config"
+	d "main/internal/app/storage/indb"
+	f "main/internal/app/storage/infile"
+	m "main/internal/app/storage/inmemory"
+	mod "main/internal/app/storage/model"
 )
 
-var S struct {
-	file string   // Путь до файла хранилища
-	URLs []string // Массив URL'ов. Используется, если file не прописан
-	ID   int      // Это ID следующего добавляемого элемента в хранилище
+type Storage interface {
+	Add(url, user string) (string, error)
+	BatchAdd(urls []string, user string) ([]string, error)
+	Get(str string) (string, error)
+	GetAll(user string) ([]mod.URLs, error)
+	PingDB(cc context.Context) error
 }
 
-type Event struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
-}
+func StartStorage(conf config.Config) (*m.InMemory, *f.InFile, *d.InDB, error) {
+	mod.S.ID = -1
 
-type Producer struct {
-	file    *os.File
-	encoder *json.Encoder
-}
+	if conf.DataBaseDSN != "" {
+		var c = &d.InDB{
+			ServerAddress: conf.ServerAddress,
+			BaseURL:       conf.BaseURL,
+			DataBaseDSN:   conf.DataBaseDSN,
+			DB:            nil,
+		}
 
-func NewProducer(fileName string) (*Producer, error) {
-	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
-	if err != nil {
-		return nil, err
-	}
-	return &Producer{
-		file:    file,
-		encoder: json.NewEncoder(file),
-	}, nil
-}
-
-func (p *Producer) WriteEvent(event *Event) error {
-	return p.encoder.Encode(&event)
-}
-
-func (p *Producer) Close() error {
-	return p.file.Close()
-}
-
-type Consumer struct {
-	file    *os.File
-	decoder *json.Decoder
-}
-
-func NewConsumer(fileName string) (*Consumer, error) {
-	file, err := os.OpenFile(fileName, os.O_RDONLY|os.O_CREATE, 0777)
-	if err != nil {
-		return nil, err
-	}
-	return &Consumer{
-		file:    file,
-		decoder: json.NewDecoder(file),
-	}, nil
-}
-
-func (c *Consumer) ReadEvent() (*Event, error) {
-	event := &Event{}
-	if err := c.decoder.Decode(&event); err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
-func (c *Consumer) Close() error {
-	return c.file.Close()
-}
-
-func StartStorage(FileStoragePath string) error {
-	S.file = FileStoragePath
-
-	consumer, err := NewConsumer(S.file)
-	if err != nil {
-		return err
-	}
-	defer func(consumer *Consumer) {
-		err := consumer.Close()
+		db, err := c.StartDataBase()
 		if err != nil {
-			log.Print("consumer close err: ", err)
+			return nil, nil, nil, err
 		}
-	}(consumer)
+		c.DB = db
 
-	for i := 0; ; i++ {
-		readEvent, err := consumer.ReadEvent()
-		if readEvent == nil {
-			break
-		} else if err != nil {
-			return err
+		return nil, nil, c, nil
+	} else if conf.FileStoragePath != "" {
+		var c = &f.InFile{
+			ServerAddress:   conf.ServerAddress,
+			BaseURL:         conf.BaseURL,
+			FileStoragePath: conf.FileStoragePath,
 		}
 
-		S.ID++
-	}
-
-	return nil
-}
-
-func Add(url string) (string, error) {
-	var id string
-
-	if S.file == "" {
-		id = strconv.FormatInt(int64(len(S.URLs)), 36)
-		S.URLs = append(S.URLs, url)
-
-		return id, nil
-	}
-
-	id = strconv.FormatInt(int64(S.ID), 36)
-	S.ID++
-
-	producer, err := NewProducer(S.file)
-	if err != nil {
-		return "", err
-	}
-	defer func(producer *Producer) {
-		err := producer.Close()
+		err := c.StartFileStorage()
 		if err != nil {
-			log.Print("producer close err: ", err)
-		}
-	}(producer)
-
-	err = producer.WriteEvent(&Event{
-		ID:  id,
-		URL: url,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return id, nil
-}
-
-func Get(s string) (string, error) {
-	id, err := strconv.ParseInt(s, 36, 64)
-	if err != nil {
-		return "", err
-	}
-
-	if S.file == "" {
-		if int(id) >= len(S.URLs) {
-			return "", fmt.Errorf("the storage is empty or the element is missing")
+			return nil, nil, nil, err
 		}
 
-		return S.URLs[int(id)], nil
+		return nil, c, nil, nil
 	}
 
-	if int(id) >= S.ID {
-		return "", fmt.Errorf("the storage is empty or the element is missing")
+	mod.S.URLs = make(map[int]mod.Event)
+
+	var c = &m.InMemory{
+		ServerAddress: conf.ServerAddress,
+		BaseURL:       conf.BaseURL,
 	}
 
-	consumer, err := NewConsumer(S.file)
-	if err != nil {
-		return "", err
-	}
-	defer func(consumer *Consumer) {
-		err := consumer.Close()
-		if err != nil {
-			log.Print("consumer close err: ", err)
-		}
-	}(consumer)
-
-	for i := 0; i <= S.ID; i++ {
-		readEvent, err := consumer.ReadEvent()
-		if err != nil {
-			return "", err
-		}
-
-		if readEvent.ID == s {
-			return readEvent.URL, nil
-		}
-	}
-
-	return "", fmt.Errorf("the storage is empty or the element is missing")
+	return c, nil, nil, nil
 }
