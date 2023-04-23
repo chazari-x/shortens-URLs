@@ -209,7 +209,7 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if del == true {
+	if del {
 		w.WriteHeader(http.StatusGone)
 		return
 	}
@@ -463,11 +463,7 @@ func (c *Controller) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 	err = c.storage.BatchUpdate(ids, uid)
 	if err != nil {
-		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		log.Print("BATCH UPDATE: add err: ", err)
+		log.Print("BATCH UPDATE: update err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

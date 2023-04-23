@@ -227,7 +227,9 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 	txStmt := tx.Stmt(updateStmt)
 
 	for _, u := range ids {
-		_, err = txStmt.Exec(u, user, true)
+		id, err := strconv.ParseInt(u, 36, 64)
+
+		_, err = txStmt.Exec(id, user, true)
 		if err != nil {
 			return err
 		}
