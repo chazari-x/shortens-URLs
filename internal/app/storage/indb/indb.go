@@ -26,13 +26,14 @@ var (
 						userID 	VARCHAR 			NOT NULL)`
 
 	selectMaxID          = `SELECT MAX(id) FROM shortURL`
-	selectIDWhereURL     = `SELECT id FROM shortURL WHERE url = $1`
+	selectIDWhereURL     = `SELECT id, del FROM shortURL WHERE url = $1`
 	selectAllWhereID     = `SELECT * FROM shortURL WHERE id = $1`
 	selectAllWhereUserID = `SELECT * FROM shortURL WHERE userID = $1`
 
 	insertOnConflict = `INSERT INTO shortURL (url, userID) VALUES ($1, $2) ON CONFLICT(url) DO NOTHING RETURNING id`
 
 	updateDelWhereIDAndUserID = `UPDATE shortURL SET del = $3 WHERE id = $1 AND userID = $2`
+	updateDelAndUserIDWhereID = `UPDATE shortURL SET del = $2, userID = $3 WHERE id = $1`
 )
 
 func (c *InDB) StartDataBase() (*sql.DB, error) {
@@ -80,27 +81,34 @@ func (c *InDB) PingDB(cc context.Context) error {
 }
 
 func (c *InDB) Add(addURL, user string) (string, error) {
-	var id int
+	var shortURL mod.ShortURL
 
-	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&id)
+	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&shortURL.ID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return "", err
 		}
 
-		err = c.DB.QueryRow(selectIDWhereURL, addURL).Scan(&id)
+		err = c.DB.QueryRow(selectIDWhereURL, addURL).Scan(&shortURL.ID, &shortURL.Del)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	sID := strconv.FormatInt(int64(id-1), 36)
+	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
 
-	if id-1 <= mod.S.ID {
+	if shortURL.ID-1 <= mod.S.ID && !shortURL.Del {
 		return sID, mod.ErrURLConflict
+	} else if shortURL.Del {
+		_, err = c.DB.Exec(updateDelAndUserIDWhereID, shortURL.ID, false, user)
+		if err != nil {
+			return "", err
+		}
+
+		return sID, nil
 	}
 
-	mod.S.ID = id - 1
+	mod.S.ID = shortURL.ID - 1
 
 	return sID, nil
 }
