@@ -20,17 +20,19 @@ type InDB struct {
 
 var (
 	createTable = `CREATE TABLE IF NOT EXISTS shortURL (
-						id SERIAL PRIMARY KEY NOT NULL, 
-						url VARCHAR UNIQUE NOT NULL, 
-						userID VARCHAR NOT NULL)`
+						id 		SERIAL 	PRIMARY KEY NOT NULL, 
+						url 	VARCHAR UNIQUE 		NOT NULL,
+						del 	BOOLEAN 			NOT NULL 	DEFAULT false, 
+						userID 	VARCHAR 			NOT NULL)`
 
-	selectMaxID = `SELECT MAX(id) FROM shortURL`
-
-	insertOnConflict = `INSERT INTO shortURL (url, userID) VALUES ($1, $2) ON CONFLICT(url) DO NOTHING RETURNING id`
-	selectIDWhereURL = `SELECT id FROM shortURL WHERE url = $1`
-
+	selectMaxID          = `SELECT MAX(id) FROM shortURL`
+	selectIDWhereURL     = `SELECT id FROM shortURL WHERE url = $1`
 	selectAllWhereID     = `SELECT * FROM shortURL WHERE id = $1`
 	selectAllWhereUserID = `SELECT * FROM shortURL WHERE userID = $1`
+
+	insertOnConflict = `INSERT INTO shortURL (url, userID) VALUES ($1, $2) ON CONFLICT(url) DO NOTHING RETURNING id`
+
+	updateDelWhereIDAndUserID = `UPDATE shortURL SET del = $3 WHERE id = $1 AND userID = $2`
 )
 
 func (c *InDB) StartDataBase() (*sql.DB, error) {
@@ -149,27 +151,27 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 	return ids, tx.Commit()
 }
 
-func (c *InDB) Get(str string) (string, error) {
+func (c *InDB) Get(str string) (string, bool, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	if int(id) > mod.S.ID {
-		return "", mod.ErrStorageIsNil
+		return "", false, mod.ErrStorageIsNil
 	}
 
 	var dbItem mod.ShortURL
 
-	err = c.DB.QueryRow(selectAllWhereID, id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
+	err = c.DB.QueryRow(selectAllWhereID, id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", mod.ErrStorageIsNil
+			return "", false, mod.ErrStorageIsNil
 		}
-		return "", err
+		return "", false, err
 	}
 
-	return dbItem.URL, nil
+	return dbItem.URL, dbItem.Del, nil
 }
 
 func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
@@ -183,7 +185,7 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 
 	for rows.Next() {
 		var dbItem mod.ShortURL
-		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.UserID)
+		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, mod.ErrStorageIsNil
@@ -191,12 +193,14 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 			return nil, err
 		}
 
-		id := strconv.FormatInt(int64(dbItem.ID-1), 36)
+		if dbItem.Del == false {
+			id := strconv.FormatInt(int64(dbItem.ID-1), 36)
 
-		UserURLs = append(UserURLs, mod.URLs{
-			ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
-			OriginalURL: dbItem.URL,
-		})
+			UserURLs = append(UserURLs, mod.URLs{
+				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
+				OriginalURL: dbItem.URL,
+			})
+		}
 	}
 
 	if rows.Err() != nil {
@@ -204,4 +208,30 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 	}
 
 	return UserURLs, nil
+}
+
+func (c *InDB) BatchUpdate(ids []string, user string) error {
+	tx, err := c.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	updateStmt, err := c.DB.Prepare(updateDelWhereIDAndUserID)
+	if err != nil {
+		return err
+	}
+
+	txStmt := tx.Stmt(updateStmt)
+
+	for _, u := range ids {
+		_, err = txStmt.Exec(u, user, true)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }

@@ -166,19 +166,19 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *InFile) Get(str string) (string, error) {
+func (c *InFile) Get(str string) (string, bool, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	if int(id) > mod.S.ID {
-		return "", mod.ErrStorageIsNil
+		return "", false, mod.ErrStorageIsNil
 	}
 
 	consumer, err := newConsumer(c.FileStoragePath)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer func() {
 		_ = consumer.Close()
@@ -189,15 +189,15 @@ func (c *InFile) Get(str string) (string, error) {
 		if readEvent == nil {
 			break
 		} else if err != nil {
-			return "", err
+			return "", false, err
 		}
 
 		if readEvent.ID == str {
-			return readEvent.URL, nil
+			return readEvent.URL, false, nil
 		}
 	}
 
-	return "", mod.ErrStorageIsNil
+	return "", false, mod.ErrStorageIsNil
 }
 
 func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
@@ -227,4 +227,8 @@ func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
 	}
 
 	return UserURLs, nil
+}
+
+func (c *InFile) BatchUpdate(_ []string, _ string) error {
+	return errors.New("db is disabled")
 }

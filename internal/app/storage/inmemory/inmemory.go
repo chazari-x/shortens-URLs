@@ -53,17 +53,17 @@ func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
 	return ids, nil
 }
 
-func (c *InMemory) Get(str string) (string, error) {
+func (c *InMemory) Get(str string) (string, bool, error) {
 	id, err := strconv.ParseInt(str, 36, 64)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	if int(id) > mod.S.ID {
-		return "", mod.ErrStorageIsNil
+		return "", false, mod.ErrStorageIsNil
 	}
 
-	return mod.S.URLs[int(id)].URL, nil
+	return mod.S.URLs[int(id)].URL, false, nil
 }
 
 func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
@@ -78,4 +78,8 @@ func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
 	}
 
 	return UserURLs, nil
+}
+
+func (c *InMemory) BatchUpdate(_ []string, _ string) error {
+	return errors.New("db is disabled")
 }

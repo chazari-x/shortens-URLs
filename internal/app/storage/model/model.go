@@ -16,6 +16,7 @@ type Event struct {
 type ShortURL struct {
 	ID     int
 	URL    string
+	Del    bool
 	UserID string
 }
 
