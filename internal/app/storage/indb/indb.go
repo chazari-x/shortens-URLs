@@ -102,7 +102,7 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 		return sID, mod.ErrURLConflict
 	}
 
-	mod.S.ID = id
+	mod.S.ID = id - 1
 
 	return sID, nil
 }
@@ -139,10 +139,10 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			}
 		}
 
-		sID := strconv.FormatInt(int64(id), 36)
+		sID := strconv.FormatInt(int64(id-1), 36)
 
 		if id > mod.S.ID {
-			mod.S.ID = id
+			mod.S.ID = id - 1
 		}
 
 		ids = append(ids, sID)
@@ -163,7 +163,7 @@ func (c *InDB) Get(str string) (string, bool, error) {
 
 	var dbItem mod.ShortURL
 
-	err = c.DB.QueryRow(selectAllWhereID, id).Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
+	err = c.DB.QueryRow(selectAllWhereID, id+1).Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, mod.ErrStorageIsNil
@@ -193,7 +193,7 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 			return nil, err
 		}
 
-		if dbItem.Del == false {
+		if !dbItem.Del {
 			id := strconv.FormatInt(int64(dbItem.ID-1), 36)
 
 			UserURLs = append(UserURLs, mod.URLs{
@@ -228,8 +228,11 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 
 	for _, u := range ids {
 		id, err := strconv.ParseInt(u, 36, 64)
+		if err != nil {
+			return err
+		}
 
-		_, err = txStmt.Exec(id, user, true)
+		_, err = txStmt.Exec(id+1, user, true)
 		if err != nil {
 			return err
 		}
