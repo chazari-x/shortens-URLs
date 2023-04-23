@@ -80,8 +80,6 @@ func (c *InDB) PingDB(cc context.Context) error {
 }
 
 func (c *InDB) Add(addURL, user string) (string, error) {
-	mod.S.ID++
-
 	var id int
 
 	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&id)
@@ -96,9 +94,9 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 		}
 	}
 
-	sID := strconv.FormatInt(int64(id), 36)
+	sID := strconv.FormatInt(int64(id-1), 36)
 
-	if id < mod.S.ID {
+	if id <= mod.S.ID {
 		return sID, mod.ErrURLConflict
 	}
 
