@@ -3,6 +3,7 @@ package inmemory
 import (
 	"context"
 	"errors"
+	"log"
 	"strconv"
 
 	mod "main/internal/app/storage/model"
@@ -80,6 +81,6 @@ func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InMemory) BatchUpdate(_ []string, _ string) error {
-	return errors.New("db is disabled")
+func (c *InMemory) BatchUpdate(_ []string, _ string) {
+	log.Print("db is disabled")
 }

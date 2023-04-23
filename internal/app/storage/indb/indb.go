@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -216,10 +217,10 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InDB) BatchUpdate(ids []string, user string) error {
+func (c *InDB) BatchUpdate(ids []string, user string) {
 	tx, err := c.DB.Begin()
 	if err != nil {
-		return err
+		log.Print(err)
 	}
 	defer func() {
 		_ = tx.Rollback()
@@ -227,7 +228,7 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 
 	updateStmt, err := c.DB.Prepare(updateDelWhereIDAndUserID)
 	if err != nil {
-		return err
+		log.Print(err)
 	}
 
 	txStmt := tx.Stmt(updateStmt)
@@ -235,14 +236,16 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 	for _, u := range ids {
 		id, err := strconv.ParseInt(u, 36, 64)
 		if err != nil {
-			return err
+			log.Print(err)
 		}
 
 		_, err = txStmt.Exec(id+1, user, true)
 		if err != nil {
-			return err
+			log.Print(err)
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		log.Print(err)
+	}
 }
