@@ -94,6 +94,8 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+	} else {
+		mod.S.ID = shortURL.ID - 2
 	}
 
 	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
