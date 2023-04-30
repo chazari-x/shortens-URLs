@@ -83,6 +83,7 @@ func (c *InDB) PingDB(cc context.Context) error {
 
 func (c *InDB) Add(addURL, user string) (string, error) {
 	var shortURL mod.ShortURL
+	shortURL.Del = true
 
 	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&shortURL.ID)
 	if err != nil {
@@ -90,7 +91,6 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 			return "", err
 		}
 
-		log.Print(err)
 		err = c.DB.QueryRow(selectIDWhereURL, addURL).Scan(&shortURL.ID, &shortURL.Del)
 		if err != nil {
 			return "", err
@@ -155,6 +155,7 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			mod.S.ID = id - 1
 		}
 
+		log.Print(sID, " ", u)
 		ids = append(ids, sID)
 	}
 
