@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"strconv"
 
@@ -231,6 +232,6 @@ func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InFile) BatchUpdate(_ []string, _ string) error {
-	return errors.New("db is disabled")
+func (c *InFile) BatchUpdate(_ []string, _ string) {
+	log.Print("db is disabled")
 }

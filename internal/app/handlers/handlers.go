@@ -204,13 +204,13 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if url == "" {
-		w.WriteHeader(http.StatusBadRequest)
+	if del {
+		w.WriteHeader(http.StatusGone)
 		return
 	}
 
-	if del {
-		w.WriteHeader(http.StatusGone)
+	if url == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -463,12 +463,7 @@ func (c *Controller) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println(ids)
 
-	err = c.storage.BatchUpdate(ids, uid)
-	if err != nil {
-		log.Print("BATCH UPDATE: storage update err: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	c.storage.BatchUpdate(ids, uid)
 
 	w.WriteHeader(http.StatusAccepted)
 }
