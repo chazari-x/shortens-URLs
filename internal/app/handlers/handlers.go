@@ -247,7 +247,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Print(string(b), err)
+		log.Print(err)
 
 		status = http.StatusConflict
 	}
@@ -464,6 +464,8 @@ func (c *Controller) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	fmt.Println(ids)
 
 	err = c.storage.BatchUpdate(ids, uid)
 	if err != nil {
