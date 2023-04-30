@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -232,6 +233,8 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 
 	txStmt := tx.Stmt(updateStmt)
 
+	log.Print(ids)
+
 	for _, u := range ids {
 		id, err := strconv.ParseInt(u, 36, 64)
 		if err != nil {
@@ -244,9 +247,5 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 		}
 	}
 
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return tx.Commit()
 }
