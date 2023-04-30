@@ -235,7 +235,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Print(b)
+	log.Print(string(b))
 
 	var status = http.StatusCreated
 
