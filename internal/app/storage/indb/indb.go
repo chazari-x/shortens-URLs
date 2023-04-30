@@ -83,7 +83,6 @@ func (c *InDB) PingDB(cc context.Context) error {
 
 func (c *InDB) Add(addURL, user string) (string, error) {
 	var shortURL mod.ShortURL
-	shortURL.Del = true
 
 	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&shortURL.ID)
 	if err != nil {
