@@ -99,18 +99,18 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
 
 	if shortURL.ID-1 <= mod.S.ID && !shortURL.Del {
-		log.Print(addURL, " ", sID, " ", mod.ErrURLConflict)
+		log.Print(sID, " ", mod.ErrURLConflict, " ", addURL)
 		return sID, mod.ErrURLConflict
 	} else if shortURL.Del {
 		_, err = c.DB.Exec(updateDelAndUserIDWhereID, shortURL.ID, false, user)
 		if err != nil {
 			return "", err
 		}
-		log.Print(addURL, " ", sID)
+		log.Print(sID, " ", addURL)
 		return sID, nil
 	}
 
-	log.Print(addURL, " ", sID)
+	log.Print(sID, " ", addURL)
 	mod.S.ID = shortURL.ID - 1
 
 	return sID, nil
