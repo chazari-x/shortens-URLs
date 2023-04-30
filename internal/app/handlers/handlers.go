@@ -235,6 +235,8 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Print(b)
+
 	var status = http.StatusCreated
 
 	id, err := c.storage.Add(string(b), uid)
