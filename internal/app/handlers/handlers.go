@@ -235,8 +235,6 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Print(string(b))
-
 	var status = http.StatusCreated
 
 	id, err := c.storage.Add(string(b), uid)
@@ -246,6 +244,8 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		log.Print(string(b), err)
 
 		status = http.StatusConflict
 	}
