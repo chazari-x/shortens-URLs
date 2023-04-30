@@ -90,6 +90,7 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 			return "", err
 		}
 
+		log.Print(err)
 		err = c.DB.QueryRow(selectIDWhereURL, addURL).Scan(&shortURL.ID, &shortURL.Del)
 		if err != nil {
 			return "", err
