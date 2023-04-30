@@ -14,7 +14,7 @@ import (
 type Storage interface {
 	Add(url, user string) (string, error)
 	BatchAdd(urls []string, user string) ([]string, error)
-	BatchUpdate(ids []string, user string)
+	BatchUpdate(ids []string, user string) error
 	Get(str string) (string, bool, error)
 	GetAll(user string) ([]mod.URLs, error)
 	PingDB(cc context.Context) error
