@@ -82,7 +82,7 @@ func (c *InDB) PingDB(cc context.Context) error {
 }
 
 func (c *InDB) Add(addURL, user string) (string, error) {
-	var shortURL mod.ShortURL
+	var shortURL mod.Event
 
 	err := c.DB.QueryRow(insertOnConflict, addURL, user).Scan(&shortURL.ID)
 	if err != nil {
@@ -173,7 +173,7 @@ func (c *InDB) Get(str string) (string, bool, error) {
 		return "", false, mod.ErrStorageIsNil
 	}
 
-	var dbItem mod.ShortURL
+	var dbItem mod.Event
 
 	err = c.DB.QueryRow(selectAllWhereID, id+1).Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
 	if err != nil {
@@ -196,7 +196,7 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 	}
 
 	for rows.Next() {
-		var dbItem mod.ShortURL
+		var dbItem mod.Event
 		err = rows.Scan(&dbItem.ID, &dbItem.URL, &dbItem.Del, &dbItem.UserID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

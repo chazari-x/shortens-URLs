@@ -22,9 +22,9 @@ func (c *InMemory) Add(url, user string) (string, error) {
 
 	id := strconv.FormatInt(int64(mod.S.ID), 36)
 	mod.S.URLs[mod.S.ID] = mod.Event{
-		ID:   id,
-		URL:  url,
-		User: user,
+		ID:     mod.S.ID,
+		URL:    url,
+		UserID: user,
 	}
 
 	return id, nil
@@ -38,9 +38,9 @@ func (c *InMemory) BatchAdd(urls []string, user string) ([]string, error) {
 	for i := 0; i < len(urls); i++ {
 		id := strconv.FormatInt(int64(mod.S.ID), 36)
 		mod.S.URLs[mod.S.ID] = mod.Event{
-			ID:   id,
-			URL:  urls[i],
-			User: user,
+			ID:     mod.S.ID,
+			URL:    urls[i],
+			UserID: user,
 		}
 
 		ids = append(ids, id)
@@ -69,9 +69,10 @@ func (c *InMemory) Get(str string) (string, bool, error) {
 func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
 	var UserURLs []mod.URLs
 	for _, i := range mod.S.URLs {
-		if i.User == user {
+		if i.UserID == user {
+			id := strconv.FormatInt(int64(i.ID), 36)
 			UserURLs = append(UserURLs, mod.URLs{
-				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + i.ID,
+				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
 				OriginalURL: i.URL,
 			})
 		}

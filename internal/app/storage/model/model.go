@@ -8,17 +8,18 @@ var S struct {
 }
 
 type Event struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	User string `json:"user"`
+	ID     int    `json:"id"`
+	URL    string `json:"url"`
+	Del    bool   `json:"del"`
+	UserID string `json:"user_id"`
 }
 
-type ShortURL struct {
-	ID     int
-	URL    string
-	Del    bool
-	UserID string
-}
+//type ShortURL struct {
+//	ID     int
+//	URL    string
+//	Del    bool
+//	UserID string
+//}
 
 type URLs struct {
 	ShortURL    string `json:"short_url"`

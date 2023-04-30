@@ -83,7 +83,7 @@ func (c *InFile) StartFileStorage() error {
 		_ = consumer.Close()
 	}()
 
-	maxID := "-1"
+	maxID := -1
 	for i := 0; ; i++ {
 		readEvent, err := consumer.ReadEvent()
 		if readEvent == nil {
@@ -95,13 +95,13 @@ func (c *InFile) StartFileStorage() error {
 		maxID = readEvent.ID
 	}
 
-	if maxID != "-1" {
-		id, err := strconv.ParseInt(maxID, 36, 64)
-		if err != nil {
-			return err
-		}
+	if maxID != -1 {
+		//id, err := strconv.ParseInt(maxID, 36, 64)
+		//if err != nil {
+		//	return err
+		//}
 
-		mod.S.ID = int(id)
+		mod.S.ID = maxID
 	}
 
 	return nil
@@ -121,9 +121,9 @@ func (c *InFile) Add(url, user string) (string, error) {
 	}()
 
 	err = producer.WriteEvent(mod.Event{
-		ID:   id,
-		URL:  url,
-		User: user,
+		ID:     mod.S.ID,
+		URL:    url,
+		UserID: user,
 	})
 	if err != nil {
 		return "", err
@@ -148,9 +148,9 @@ func (c *InFile) BatchAdd(urls []string, user string) ([]string, error) {
 	for i := 0; i < len(urls); i++ {
 		id := strconv.FormatInt(int64(mod.S.ID), 36)
 		err = producer.WriteEvent(mod.Event{
-			ID:   id,
-			URL:  urls[i],
-			User: user,
+			ID:     mod.S.ID,
+			URL:    urls[i],
+			UserID: user,
 		})
 		if err != nil {
 			return nil, err
@@ -192,7 +192,8 @@ func (c *InFile) Get(str string) (string, bool, error) {
 			return "", false, err
 		}
 
-		if readEvent.ID == str {
+		eid := strconv.FormatInt(int64(readEvent.ID), 36)
+		if eid == str {
 			return readEvent.URL, false, nil
 		}
 	}
@@ -218,9 +219,10 @@ func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
 			return UserURLs, err
 		}
 
-		if readEvent.User == user {
+		if readEvent.UserID == user {
+			id := strconv.FormatInt(int64(readEvent.ID), 36)
 			UserURLs = append(UserURLs, mod.URLs{
-				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + readEvent.ID,
+				ShortURL:    "http://" + c.ServerAddress + c.BaseURL + id,
 				OriginalURL: readEvent.URL,
 			})
 		}
