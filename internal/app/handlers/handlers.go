@@ -237,6 +237,8 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 
 	var status = http.StatusCreated
 
+	log.Print(string(b))
+
 	id, err := c.storage.Add(string(b), uid)
 	if err != nil {
 		if !strings.Contains(err.Error(), "url conflict") {
