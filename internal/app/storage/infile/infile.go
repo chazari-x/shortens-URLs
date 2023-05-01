@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
 	"strconv"
 
@@ -97,11 +96,6 @@ func (c *InFile) StartFileStorage() error {
 	}
 
 	if maxID != -1 {
-		//id, err := strconv.ParseInt(maxID, 36, 64)
-		//if err != nil {
-		//	return err
-		//}
-
 		mod.S.ID = maxID
 	}
 
@@ -232,6 +226,6 @@ func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InFile) BatchUpdate(_ []string, _ string) {
-	log.Print("db is disabled")
+func (c *InFile) BatchUpdate(_ []string, _ string) error {
+	return errors.New("method not allowed")
 }

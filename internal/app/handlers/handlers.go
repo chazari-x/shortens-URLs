@@ -461,9 +461,12 @@ func (c *Controller) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(ids)
-
-	c.storage.BatchUpdate(ids, uid)
+	err = c.storage.BatchUpdate(ids, uid)
+	if err != nil {
+		log.Print("BATCH UPDATE: storage: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusAccepted)
 }

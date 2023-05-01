@@ -88,82 +88,84 @@ func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InMemory) BatchUpdate(ids []string, user string) {
-	//res := fanOut(&mod.S.URLs, ids, user)
+const workersCount = 5
 
-	for _, r := range ids {
-		id, err := strconv.ParseInt(r, 36, 64)
-		if err != nil {
-			log.Print(err)
+func (c *InMemory) BatchUpdate(ids []string, user string) error {
+	inputCh := make(chan string, len(ids))
+
+	go func() {
+		for _, r := range ids {
+			inputCh <- r
 		}
 
-		if mod.S.URLs[int(id)].UserID == user {
-			mod.S.URLs[int(id)] = mod.Event{
-				ID:     int(id),
-				URL:    mod.S.URLs[int(id)].URL,
-				Del:    true,
-				UserID: user,
-			}
-		}
+		close(inputCh)
+	}()
+
+	fanOutChs := fanOut(inputCh, workersCount)
+	for _, fanOutCh := range fanOutChs {
+		newWorker(fanOutCh, user)
 	}
+
+	return nil
 }
 
-//func fanOut(m *map[int]mod.Event, ids []string, user string) []string {
-//	var res []string
-//	//stopCh := make(chan struct{})
-//	resCh := make(chan string)
-//
-//	wg := &sync.WaitGroup{}
-//	wg.Add(1)
-//	go func(resCh chan string, res []string, wg *sync.WaitGroup) {
-//		for r := range resCh {
-//			res = append(res, r)
-//		}
-//		wg.Done()
-//	}(resCh, res, wg)
-//
-//	startFanOut(m, ids, user, resCh)
-//
-//	wg.Wait()
-//	close(resCh)
-//
-//	log.Print(res)
-//	return res
-//}
-//
-//func startFanOut(m *map[int]mod.Event, ids []string, user string, resCh chan<- string) {
-//	wg := &sync.WaitGroup{}
-//	wg.Add(len(ids))
-//	for _, id := range ids {
-//		//go workFanOut(*m, id, user, resCh)
-//		go func(m map[int]mod.Event, id string, wg *sync.WaitGroup) {
-//			i, err := strconv.ParseInt(id, 36, 64)
-//			if err != nil {
-//				wg.Done()
-//				return
-//			}
-//
-//			log.Print(id, " ", user, " ", int(i) < len(m) && m[int(i)].UserID == user)
-//			if m[int(i)].UserID == user {
-//				resCh <- id
-//			}
-//
-//			wg.Done()
-//		}(*m, id, wg)
-//	}
-//	wg.Wait()
-//}
-//
-////func workFanOut(m map[int]mod.Event, id, user string, resCh chan<- string) {
-////	go func() {
-////		log.Print(id, " ", user)
-////		i, err := strconv.ParseInt(id, 36, 64)
-////		if err != nil {
-////			return
-////		}
-////
-////		if m[int(i)].UserID == user {
-////			resCh <- id
-////		}
-////	}()
-////}
+func fanOut(inputCh chan string, n int) []chan string {
+	chs := make([]chan string, 0, n)
+	for i := 0; i < n; i++ {
+		ch := make(chan string)
+		chs = append(chs, ch)
+	}
+
+	go func() {
+		defer func(chs []chan string) {
+			for _, ch := range chs {
+				close(ch)
+			}
+		}(chs)
+
+		for i := 0; ; i++ {
+			if i == len(chs) {
+				i = 0
+			}
+
+			id, ok := <-inputCh
+			if !ok {
+				return
+			}
+
+			ch := chs[i]
+			ch <- id
+		}
+	}()
+
+	return chs
+}
+
+func newWorker(input chan string, user string) {
+	go func() {
+		defer func() {
+			if x := recover(); x != nil {
+				newWorker(input, user)
+				log.Printf("run time panic: %v", x)
+			}
+		}()
+
+		for sid := range input {
+			id, err := strconv.ParseInt(sid, 36, 64)
+			if err != nil {
+				log.Print(err)
+			}
+
+			ok := mod.S.URLs[int(id)].UserID == user && !mod.S.URLs[int(id)].Del
+			log.Printf("delete: %5s, user: %s, id: %s, url: %s", strconv.FormatBool(ok), user, sid, mod.S.URLs[int(id)].URL)
+			if ok {
+				mod.S.URLs[int(id)] = mod.Event{
+					ID:     int(id),
+					URL:    mod.S.URLs[int(id)].URL,
+					Del:    true,
+					UserID: user,
+				}
+			}
+		}
+	}()
+}

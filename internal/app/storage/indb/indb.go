@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	mod "main/internal/app/storage/model"
@@ -101,18 +102,15 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
 
 	if shortURL.ID-1 <= mod.S.ID && !shortURL.Del {
-		log.Print(sID, " ", mod.ErrURLConflict, " ", addURL)
 		return sID, mod.ErrURLConflict
 	} else if shortURL.Del {
 		_, err = c.DB.Exec(updateDelAndUserIDWhereID, shortURL.ID, false, user)
 		if err != nil {
 			return "", err
 		}
-		log.Print(sID, " ", addURL)
 		return sID, nil
 	}
 
-	log.Print(sID, " ", addURL)
 	mod.S.ID = shortURL.ID - 1
 
 	return sID, nil
@@ -156,7 +154,6 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			mod.S.ID = id - 1
 		}
 
-		log.Print(sID, " ", u)
 		ids = append(ids, sID)
 	}
 
@@ -222,7 +219,9 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InDB) BatchUpdate(ids []string, user string) {
+const workersCount = 5
+
+func (c *InDB) BatchUpdate(ids []string, user string) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		log.Print(err)
@@ -238,19 +237,112 @@ func (c *InDB) BatchUpdate(ids []string, user string) {
 
 	txStmt := tx.Stmt(updateStmt)
 
-	for _, u := range ids {
-		id, err := strconv.ParseInt(u, 36, 64)
-		if err != nil {
-			log.Print(err)
+	inputCh := make(chan string, len(ids))
+
+	go func() {
+		for _, r := range ids {
+			inputCh <- r
 		}
 
-		_, err = txStmt.Exec(id+1, user, true)
-		if err != nil {
-			log.Print(err)
-		}
+		close(inputCh)
+	}()
+
+	fanOutChs := fanOut(inputCh, workersCount)
+	workerChs := make([]chan *sql.Stmt, 0, workersCount)
+	for _, fanOutCh := range fanOutChs {
+		workerCh := make(chan *sql.Stmt)
+		newWorker(fanOutCh, workerCh, user, txStmt)
+		workerChs = append(workerChs, workerCh)
 	}
 
-	if err := tx.Commit(); err != nil {
-		log.Print(err)
+	for w := range fanIn(workerChs...) {
+		txStmt = w
 	}
+
+	return tx.Commit()
+}
+
+func fanOut(inputCh chan string, n int) []chan string {
+	chs := make([]chan string, 0, n)
+	for i := 0; i < n; i++ {
+		ch := make(chan string)
+		chs = append(chs, ch)
+	}
+
+	go func() {
+		defer func(chs []chan string) {
+			for _, ch := range chs {
+				close(ch)
+			}
+		}(chs)
+
+		for i := 0; ; i++ {
+			if i == len(chs) {
+				i = 0
+			}
+
+			id, ok := <-inputCh
+			if !ok {
+				return
+			}
+
+			ch := chs[i]
+			ch <- id
+		}
+	}()
+
+	return chs
+}
+
+func fanIn(inputChs ...chan *sql.Stmt) chan *sql.Stmt {
+	outCh := make(chan *sql.Stmt)
+
+	go func() {
+		wg := &sync.WaitGroup{}
+
+		for _, inputCh := range inputChs {
+			wg.Add(1)
+
+			go func(inputCh chan *sql.Stmt) {
+				defer wg.Done()
+				for item := range inputCh {
+					outCh <- item
+				}
+			}(inputCh)
+		}
+
+		wg.Wait()
+		close(outCh)
+	}()
+
+	return outCh
+}
+
+func newWorker(input chan string, out chan *sql.Stmt, user string, txStmt *sql.Stmt) {
+	go func() {
+		defer func() {
+			if x := recover(); x != nil {
+				newWorker(input, out, user, txStmt)
+				log.Printf("run time panic: %v", x)
+			}
+		}()
+
+		for sid := range input {
+			id, err := strconv.ParseInt(sid, 36, 64)
+			if err != nil {
+				log.Print(err)
+			}
+
+			log.Printf("delete: %s, user: %s, id: %s, url: %s", "try", user, sid, mod.S.URLs[int(id)].URL)
+
+			_, err = txStmt.Exec(id+1, user, true)
+			if err != nil {
+				log.Print(err)
+			}
+
+			out <- txStmt
+		}
+
+		close(out)
+	}()
 }
