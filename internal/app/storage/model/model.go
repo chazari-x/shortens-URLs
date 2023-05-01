@@ -14,13 +14,6 @@ type Event struct {
 	UserID string `json:"user_id"`
 }
 
-//type ShortURL struct {
-//	ID     int
-//	URL    string
-//	Del    bool
-//	UserID string
-//}
-
 type URLs struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
