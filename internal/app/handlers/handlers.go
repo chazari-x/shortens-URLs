@@ -354,7 +354,7 @@ func (c *Controller) BatchAdd(w http.ResponseWriter, r *http.Request) {
 	id, err := c.storage.BatchAdd(urls, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
-			log.Printf("batchAdd: %s, user: %s, ids: %s, urls: %s", http.StatusBadRequest, uid, id, urls)
+			log.Printf("batchAdd: %d, user: %s, ids: %s, urls: %s", http.StatusBadRequest, uid, id, urls)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
