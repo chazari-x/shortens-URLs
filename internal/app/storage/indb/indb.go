@@ -241,20 +241,6 @@ func (c *InDB) BatchUpdate(ids []string, user string) {
 
 	txStmt := tx.Stmt(updateStmt)
 
-	//for _, u := range ids {
-	//	id, err := strconv.ParseInt(u, 36, 64)
-	//	if err != nil {
-	//		log.Print(err)
-	//	}
-	//
-	//	_, err = txStmt.Exec(id+1, user, true)
-	//	if err != nil {
-	//		log.Print(err)
-	//	}
-	//}
-	//
-	//return tx.Commit()
-
 	inputCh := make(chan string, len(ids))
 
 	go func() {
@@ -276,6 +262,10 @@ func (c *InDB) BatchUpdate(ids []string, user string) {
 	for w := range fanIn(workerChs...) {
 		txStmt = w
 	}
+
+	defer func() {
+		_ = txStmt.Close()
+	}()
 
 	if err := tx.Commit(); err != nil {
 		log.Print(err)
