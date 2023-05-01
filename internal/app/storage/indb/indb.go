@@ -102,18 +102,15 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
 
 	if shortURL.ID-1 <= mod.S.ID && !shortURL.Del {
-		log.Print(sID, " ", mod.ErrURLConflict, " ", addURL)
 		return sID, mod.ErrURLConflict
 	} else if shortURL.Del {
 		_, err = c.DB.Exec(updateDelAndUserIDWhereID, shortURL.ID, false, user)
 		if err != nil {
 			return "", err
 		}
-		log.Print(sID, " ", addURL)
 		return sID, nil
 	}
 
-	log.Print(sID, " ", addURL)
 	mod.S.ID = shortURL.ID - 1
 
 	return sID, nil
@@ -157,7 +154,6 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			mod.S.ID = id - 1
 		}
 
-		log.Print(sID, " ", u)
 		ids = append(ids, sID)
 	}
 
@@ -337,7 +333,7 @@ func newWorker(input chan string, out chan *sql.Stmt, user string, txStmt *sql.S
 				log.Print(err)
 			}
 
-			log.Printf("delete: %s, user: %s, id: %s, url: %s", "try", user, sid, mod.S.URLs[int(id)].URL)
+			log.Printf("delete: %s, user: %s, id: %s", "try", user, sid)
 
 			_, err = txStmt.Exec(id+1, user, true)
 			if err != nil {
