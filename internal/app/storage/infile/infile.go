@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"strconv"
 
@@ -226,6 +227,6 @@ func (c *InFile) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-func (c *InFile) BatchUpdate(_ []string, _ string) error {
-	return errors.New("method not allowed")
+func (c *InFile) BatchUpdate(_ []string, _ string) {
+	log.Print("method not allowed")
 }

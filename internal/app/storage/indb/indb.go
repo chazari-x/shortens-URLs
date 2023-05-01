@@ -102,15 +102,18 @@ func (c *InDB) Add(addURL, user string) (string, error) {
 	sID := strconv.FormatInt(int64(shortURL.ID-1), 36)
 
 	if shortURL.ID-1 <= mod.S.ID && !shortURL.Del {
+		log.Print(sID, " ", mod.ErrURLConflict, " ", addURL)
 		return sID, mod.ErrURLConflict
 	} else if shortURL.Del {
 		_, err = c.DB.Exec(updateDelAndUserIDWhereID, shortURL.ID, false, user)
 		if err != nil {
 			return "", err
 		}
+		log.Print(sID, " ", addURL)
 		return sID, nil
 	}
 
+	log.Print(sID, " ", addURL)
 	mod.S.ID = shortURL.ID - 1
 
 	return sID, nil
@@ -154,6 +157,7 @@ func (c *InDB) BatchAdd(urls []string, user string) ([]string, error) {
 			mod.S.ID = id - 1
 		}
 
+		log.Print(sID, " ", u)
 		ids = append(ids, sID)
 	}
 
@@ -221,7 +225,7 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 
 const workersCount = 5
 
-func (c *InDB) BatchUpdate(ids []string, user string) error {
+func (c *InDB) BatchUpdate(ids []string, user string) {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		log.Print(err)
@@ -236,6 +240,20 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 	}
 
 	txStmt := tx.Stmt(updateStmt)
+
+	//for _, u := range ids {
+	//	id, err := strconv.ParseInt(u, 36, 64)
+	//	if err != nil {
+	//		log.Print(err)
+	//	}
+	//
+	//	_, err = txStmt.Exec(id+1, user, true)
+	//	if err != nil {
+	//		log.Print(err)
+	//	}
+	//}
+	//
+	//return tx.Commit()
 
 	inputCh := make(chan string, len(ids))
 
@@ -259,7 +277,9 @@ func (c *InDB) BatchUpdate(ids []string, user string) error {
 		txStmt = w
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Print(err)
+	}
 }
 
 func fanOut(inputCh chan string, n int) []chan string {
@@ -283,6 +303,7 @@ func fanOut(inputCh chan string, n int) []chan string {
 
 			id, ok := <-inputCh
 			if !ok {
+
 				return
 			}
 
@@ -320,13 +341,6 @@ func fanIn(inputChs ...chan *sql.Stmt) chan *sql.Stmt {
 
 func newWorker(input chan string, out chan *sql.Stmt, user string, txStmt *sql.Stmt) {
 	go func() {
-		defer func() {
-			if x := recover(); x != nil {
-				newWorker(input, out, user, txStmt)
-				log.Printf("run time panic: %v", x)
-			}
-		}()
-
 		for sid := range input {
 			id, err := strconv.ParseInt(sid, 36, 64)
 			if err != nil {

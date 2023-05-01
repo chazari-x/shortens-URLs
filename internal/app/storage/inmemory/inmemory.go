@@ -90,7 +90,7 @@ func (c *InMemory) GetAll(user string) ([]mod.URLs, error) {
 
 const workersCount = 5
 
-func (c *InMemory) BatchUpdate(ids []string, user string) error {
+func (c *InMemory) BatchUpdate(ids []string, user string) {
 	inputCh := make(chan string, len(ids))
 
 	go func() {
@@ -105,8 +105,6 @@ func (c *InMemory) BatchUpdate(ids []string, user string) error {
 	for _, fanOutCh := range fanOutChs {
 		newWorker(fanOutCh, user)
 	}
-
-	return nil
 }
 
 func fanOut(inputCh chan string, n int) []chan string {
