@@ -7,7 +7,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	mod "main/internal/app/storage/model"
@@ -219,24 +218,7 @@ func (c *InDB) GetAll(user string) ([]mod.URLs, error) {
 	return UserURLs, nil
 }
 
-const workersCount = 5
-
 func (c *InDB) BatchUpdate(ids []string, user string) {
-	tx, err := c.DB.Begin()
-	if err != nil {
-		log.Print(err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	updateStmt, err := c.DB.Prepare(updateDelWhereIDAndUserID)
-	if err != nil {
-		log.Print(err)
-	}
-
-	txStmt := tx.Stmt(updateStmt)
-
 	inputCh := make(chan string, len(ids))
 
 	go func() {
@@ -247,86 +229,55 @@ func (c *InDB) BatchUpdate(ids []string, user string) {
 		close(inputCh)
 	}()
 
-	fanOutChs := fanOut(inputCh, workersCount)
-	workerChs := make([]chan *sql.Stmt, 0, workersCount)
-	for _, fanOutCh := range fanOutChs {
-		workerCh := make(chan *sql.Stmt)
-		newWorker(fanOutCh, workerCh, user, txStmt)
-		workerChs = append(workerChs, workerCh)
-	}
-
-	for w := range fanIn(workerChs...) {
-		txStmt = w
-	}
-
-	defer func() {
-		_ = txStmt.Close()
-	}()
-
-	if err := tx.Commit(); err != nil {
-		log.Print(err)
-	}
+	fanInCh := fanIn(inputCh)
+	c.worker(fanInCh, user)
 }
 
-func fanOut(inputCh chan string, n int) []chan string {
-	chs := make([]chan string, 0, n)
-	for i := 0; i < n; i++ {
-		ch := make(chan string)
-		chs = append(chs, ch)
-	}
+func fanIn(inputCh chan string) chan string {
+	ch := make(chan string)
 
 	go func() {
-		defer func(chs []chan string) {
-			for _, ch := range chs {
-				close(ch)
-			}
-		}(chs)
+		defer func(ch chan string) {
+			close(ch)
+		}(ch)
 
-		for i := 0; ; i++ {
-			if i == len(chs) {
-				i = 0
-			}
-
+		for {
 			id, ok := <-inputCh
 			if !ok {
-
 				return
 			}
-
-			ch := chs[i]
 			ch <- id
 		}
 	}()
 
-	return chs
+	return ch
 }
 
-func fanIn(inputChs ...chan *sql.Stmt) chan *sql.Stmt {
-	outCh := make(chan *sql.Stmt)
-
+func (c *InDB) worker(input chan string, user string) {
 	go func() {
-		wg := &sync.WaitGroup{}
+		tx, err := c.DB.Begin()
+		if err != nil {
+			log.Print("begin err: ", err)
+			return
+		}
+		defer func() {
+			_ = tx.Rollback()
+		}()
 
-		for _, inputCh := range inputChs {
-			wg.Add(1)
-
-			go func(inputCh chan *sql.Stmt) {
-				defer wg.Done()
-				for item := range inputCh {
-					outCh <- item
-				}
-			}(inputCh)
+		updateStmt, err := c.DB.Prepare(updateDelWhereIDAndUserID)
+		if err != nil {
+			log.Print("prepare err: ", err)
+			return
 		}
 
-		wg.Wait()
-		close(outCh)
-	}()
+		txStmt := tx.Stmt(updateStmt)
 
-	return outCh
-}
+		defer func() {
+			if err := tx.Commit(); err != nil {
+				log.Print("commit err: ", err)
+			}
+		}()
 
-func newWorker(input chan string, out chan *sql.Stmt, user string, txStmt *sql.Stmt) {
-	go func() {
 		for sid := range input {
 			id, err := strconv.ParseInt(sid, 36, 64)
 			if err != nil {
@@ -339,10 +290,6 @@ func newWorker(input chan string, out chan *sql.Stmt, user string, txStmt *sql.S
 			if err != nil {
 				log.Print(err)
 			}
-
-			out <- txStmt
 		}
-
-		close(out)
 	}()
 }
