@@ -39,12 +39,16 @@ func StartSever() error {
 	c := h.NewController(model, conf, db)
 
 	r := chi.NewRouter()
+
 	r.Get("/"+conf.BaseURL+"{id}", c.Get)
 	r.Get("/api/user/urls", c.UserURLs)
 	r.Get("/ping", c.Ping)
+
 	r.Post("/", c.Post)
 	r.Post("/api/shorten", c.Shorten)
-	r.Post("/api/shorten/batch", c.Batch)
+	r.Post("/api/shorten/batch", c.BatchAdd)
+
+	r.Delete("/api/user/urls", c.BatchUpdate)
 
 	return http.ListenAndServe(conf.ServerAddress[:len(conf.ServerAddress)-1], h.MiddlewaresConveyor(r))
 }

@@ -37,7 +37,7 @@ func TestAddAndGet(t *testing.T) {
 			if gotAdd != tt.want {
 				t.Errorf("Add() got = %v, want %v", gotAdd, tt.want)
 			}
-			gotGet, err := c.Get(tt.want)
+			gotGet, _, err := c.Get(tt.want)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
 				return

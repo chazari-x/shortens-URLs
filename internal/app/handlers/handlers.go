@@ -193,7 +193,7 @@ func cookieMiddleware(next http.Handler) http.Handler {
 func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-	url, err := c.storage.Get(chi.URLParam(r, "id"))
+	url, del, err := c.storage.Get(chi.URLParam(r, "id"))
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
 			w.WriteHeader(http.StatusBadRequest)
@@ -201,6 +201,11 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Print("GET: get err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if del {
+		w.WriteHeader(http.StatusGone)
 		return
 	}
 
@@ -233,6 +238,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 	var status = http.StatusCreated
 
 	id, err := c.storage.Add(string(b), uid)
+
 	if err != nil {
 		if !strings.Contains(err.Error(), "url conflict") {
 			log.Print("POST: add err: ", err)
@@ -243,6 +249,7 @@ func (c *Controller) Post(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusConflict
 	}
 
+	log.Printf("add: %d, user: %s, id: %s, url: %s", status, uid, id, string(b))
 	w.WriteHeader(status)
 
 	_, err = w.Write([]byte("http://" + c.sConf.ServerAddress + c.sConf.BaseURL + id))
@@ -284,7 +291,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	id, err := c.storage.Add(url.URL, uid)
 	if err != nil {
 		if !strings.Contains(err.Error(), "url conflict") {
-			log.Print("SHORTEN: add err: ", err)
+			log.Printf("add: %s, user: %s, id: %s, url: %s", err, uid, id, url.URL)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -292,6 +299,7 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusConflict
 	}
 
+	log.Printf("add: %d, user: %s, id: %s, url: %s", status, uid, id, url.URL)
 	w.WriteHeader(status)
 
 	marshal, err := json.Marshal(short{
@@ -311,14 +319,14 @@ func (c *Controller) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) BatchAdd(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	uid := fmt.Sprintf("%v", r.Context().Value(identification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("BATCH: read all err: ", err)
+		log.Print("BATCH ADD: read all err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -332,7 +340,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &bOriginal)
 	if err != nil {
-		log.Print("BATCH: json unmarshal err: ", err)
+		log.Print("BATCH ADD: json unmarshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -346,13 +354,17 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 	id, err := c.storage.BatchAdd(urls, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "the storage is empty or the element is missing") {
+			log.Printf("batchAdd: %d, user: %s, ids: %s, urls: %s", http.StatusBadRequest, uid, id, urls)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		log.Print("BATCH: add err: ", err)
+
+		log.Printf("batchAdd: %s, user: %s, ids: %s, urls: %s", err, uid, id, urls)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("batchAdd: true, user: %s, ids: %s, urls: %s", uid, id, urls)
 
 	bShort := make([]BatchShort, len(id))
 
@@ -365,7 +377,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 
 	marshal, err := json.Marshal(bShort)
 	if err != nil {
-		log.Print("BATCH: json marshal err: ", err)
+		log.Print("BATCH ADD: json marshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -374,7 +386,7 @@ func (c *Controller) Batch(w http.ResponseWriter, r *http.Request) {
 
 	_, err = w.Write(marshal)
 	if err != nil {
-		log.Print("BATCH: write err: ", err)
+		log.Print("BATCH ADD: write err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -428,4 +440,35 @@ func (c *Controller) Ping(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (c *Controller) BatchUpdate(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	uid := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Print("BATCH UPDATE: read all err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if string(b) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var ids []string
+
+	err = json.Unmarshal(b, &ids)
+	if err != nil {
+		log.Print("BATCH UPDATE: json unmarshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	c.storage.BatchUpdate(ids, uid)
+
+	w.WriteHeader(http.StatusAccepted)
 }
